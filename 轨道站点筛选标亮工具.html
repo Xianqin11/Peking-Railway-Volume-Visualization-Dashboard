@@ -1,0 +1,1314 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>北京地铁站点筛选与地图导出工具</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        body {
+            font-family: "Inter", "Microsoft YaHei", "PingFang SC", sans-serif;
+            background: #f0f2f5;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        .header {
+            background: #1e2a3a;
+            color: white;
+            padding: 12px 20px;
+            font-size: 18px;
+            font-weight: 600;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            z-index: 10;
+        }
+        .main-container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        .sidebar {
+            width: 400px;
+            background: rgba(255,255,255,0.96);
+            backdrop-filter: blur(12px);
+            border-right: 1px solid #e2e8f0;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            box-shadow: 2px 0 12px rgba(0,0,0,0.02);
+            z-index: 20;
+        }
+        .sidebar-section {
+            padding: 16px 18px;
+            border-bottom: 1px solid #edf2f7;
+        }
+        .sidebar-section h3 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #1e2a3a;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .upload-area {
+            background: #f8fafc;
+            border: 2px dashed #cbd5e1;
+            border-radius: 16px;
+            padding: 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: 0.2s;
+            margin-bottom: 12px;
+        }
+        .upload-area:hover {
+            background: #f1f5f9;
+            border-color: #3b82f6;
+        }
+        .upload-area input {
+            display: none;
+        }
+        .file-info {
+            font-size: 12px;
+            color: #475569;
+            margin-top: 8px;
+        }
+        .upload-preview {
+            font-size: 11px;
+            color: #3b82f6;
+            background: #eef2ff;
+            padding: 6px;
+            border-radius: 8px;
+            margin-top: 8px;
+            word-break: break-all;
+        }
+        .dropdown-group {
+            margin-bottom: 16px;
+        }
+        .dropdown-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 6px;
+            color: #334155;
+        }
+        .dropdown-group select {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 12px;
+            font-size: 13px;
+            background: white;
+            cursor: pointer;
+            outline: none;
+        }
+        .cascade-group {
+            margin-bottom: 16px;
+            background: #f8fafc;
+            border-radius: 12px;
+            padding: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        .cascade-group label {
+            display: block;
+            font-size: 12px;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #334155;
+        }
+        .cascade-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 8px;
+        }
+        .station-list {
+            max-height: 150px;
+            overflow-y: auto;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            background: white;
+            padding: 8px;
+        }
+        .station-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 8px;
+            font-size: 12px;
+            cursor: pointer;
+            border-radius: 6px;
+            transition: background 0.1s;
+        }
+        .station-item:hover {
+            background: #eef2ff;
+        }
+        .station-item input {
+            width: 16px;
+            height: 16px;
+            cursor: pointer;
+        }
+        .station-item label {
+            flex: 1;
+            cursor: pointer;
+            margin: 0;
+            font-size: 12px;
+            font-weight: normal;
+        }
+        .select-all-btn {
+            font-size: 11px;
+            color: #3b82f6;
+            cursor: pointer;
+            margin-top: 8px;
+            text-align: right;
+        }
+        .filter-buttons {
+            display: flex;
+            gap: 10px;
+            margin-top: 12px;
+        }
+        button {
+            background: #3b82f6;
+            border: none;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        button:hover {
+            background: #2563eb;
+        }
+        .btn-secondary {
+            background: #e2e8f0;
+            color: #1e2a3a;
+        }
+        .btn-secondary:hover {
+            background: #cbd5e1;
+        }
+        .style-control {
+            margin-bottom: 16px;
+        }
+        .style-control label {
+            display: block;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 6px;
+            color: #334155;
+        }
+        .style-control input {
+            width: 100%;
+        }
+        .color-row {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+        .color-row input[type="color"] {
+            width: 40px;
+            height: 32px;
+            border: 1px solid #cbd5e1;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .download-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        .download-row {
+            display: flex;
+            gap: 8px;
+        }
+        .download-row button {
+            flex: 1;
+            font-size: 12px;
+        }
+        .legend-sample {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-top: 12px;
+            padding: 8px;
+            background: #f1f5f9;
+            border-radius: 12px;
+        }
+        .legend-circle {
+            width: 24px;
+            height: 24px;
+            border-radius: 50%;
+            background: #3b82f6;
+            border: 2px solid white;
+            box-shadow: 0 0 0 1px #cbd5e1;
+        }
+        .stats-info {
+            background: #eef2ff;
+            padding: 10px;
+            border-radius: 12px;
+            font-size: 13px;
+            color: #1e40af;
+            text-align: center;
+            margin-top: 12px;
+        }
+        .map-container {
+            flex: 1;
+            position: relative;
+            background: #eef2f5;
+        }
+        #map {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: #eef2f5;
+        }
+        .status-badge {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.6);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+        .clear-btn {
+            font-size: 11px;
+            color: #ef4444;
+            cursor: pointer;
+            margin-left: 8px;
+        }
+        .export-note {
+            font-size: 10px;
+            color: #64748b;
+            margin-top: 8px;
+            padding: 6px;
+            background: #f1f5f9;
+            border-radius: 8px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+<div class="header">
+    🚇 北京地铁站点筛选与地图导出工具 | 支持透明背景导出
+</div>
+<div class="main-container">
+    <div class="sidebar">
+        <div class="sidebar-section">
+            <h3>📂 上传站点列表 (CSV)</h3>
+            <div class="upload-area" id="uploadArea">
+                📄 点击或拖拽上传 CSV 文件
+                <input type="file" id="csvUpload" accept=".csv">
+                <div class="file-info" id="fileInfo">未上传文件</div>
+                <div id="uploadPreview" class="upload-preview" style="display:none;"></div>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <h3>🔍 筛选条件 (级联选择)</h3>
+            
+            <!-- 线路选择 -->
+            <div class="dropdown-group">
+                <label>🚉 选择线路</label>
+                <select id="lineSelect">
+                    <option value="">-- 请选择线路 --</option>
+                </select>
+            </div>
+            <div class="cascade-group" id="stationCascadeGroup" style="display: none;">
+                <div class="cascade-header">
+                    <label>📍 线路站点 (可多选)</label>
+                    <span class="clear-btn" id="clearLineStations">清空</span>
+                </div>
+                <div id="stationChecklist" class="station-list"></div>
+                <div class="select-all-btn" id="selectAllStations">全选</div>
+            </div>
+
+            <!-- 环路选择 -->
+            <div class="dropdown-group">
+                <label>🔄 选择环路</label>
+                <select id="ringSelect">
+                    <option value="">-- 请选择环路 --</option>
+                </select>
+            </div>
+            <div class="cascade-group" id="ringCascadeGroup" style="display: none;">
+                <div class="cascade-header">
+                    <label>📍 环路站点 (可多选)</label>
+                    <span class="clear-btn" id="clearRingStations">清空</span>
+                </div>
+                <div id="ringStationChecklist" class="station-list"></div>
+                <div class="select-all-btn" id="selectAllRingStations">全选</div>
+            </div>
+
+            <!-- 区县选择 -->
+            <div class="dropdown-group">
+                <label>📍 选择区县</label>
+                <select id="districtSelect">
+                    <option value="">-- 请选区县 --</option>
+                </select>
+            </div>
+            <div class="cascade-group" id="districtCascadeGroup" style="display: none;">
+                <div class="cascade-header">
+                    <label>📍 区县站点 (可多选)</label>
+                    <span class="clear-btn" id="clearDistrictStations">清空</span>
+                </div>
+                <div id="districtStationChecklist" class="station-list"></div>
+                <div class="select-all-btn" id="selectAllDistrictStations">全选</div>
+            </div>
+
+            <!-- 分区选择 -->
+            <div class="dropdown-group">
+                <label>🗺️ 选择分区</label>
+                <select id="zoneSelect">
+                    <option value="">-- 请选择分区 --</option>
+                </select>
+            </div>
+            <div class="cascade-group" id="zoneCascadeGroup" style="display: none;">
+                <div class="cascade-header">
+                    <label>📍 分区站点 (可多选)</label>
+                    <span class="clear-btn" id="clearZoneStations">清空</span>
+                </div>
+                <div id="zoneStationChecklist" class="station-list"></div>
+                <div class="select-all-btn" id="selectAllZoneStations">全选</div>
+            </div>
+
+            <div class="filter-buttons">
+                <button id="applyFilterBtn">应用筛选</button>
+                <button id="resetFilterBtn" class="btn-secondary">重置所有</button>
+            </div>
+            <div class="stats-info" id="statsInfo">
+                当前选中: 0 个站点
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <h3>🎨 气泡样式</h3>
+            <div class="style-control">
+                <label>填充颜色</label>
+                <div class="color-row">
+                    <input type="color" id="bubbleColor" value="#3b82f6">
+                    <span id="colorPreview" style="flex:1; font-size:12px;">#3b82f6</span>
+                </div>
+            </div>
+            <div class="style-control">
+                <label>透明度 <span id="opacityValue">0.85</span></label>
+                <input type="range" id="opacitySlider" min="0.2" max="1.0" step="0.01" value="0.85">
+            </div>
+            <div class="style-control">
+                <label>边框颜色</label>
+                <div class="color-row">
+                    <input type="color" id="strokeColor" value="#ffffff">
+                    <span id="strokePreview" style="flex:1; font-size:12px;">#ffffff</span>
+                </div>
+            </div>
+            <div class="style-control">
+                <label>边框宽度 <span id="strokeWidthValue">1.5</span> px</label>
+                <input type="range" id="strokeWidth" min="0" max="5" step="0.5" value="1.5">
+            </div>
+            <div class="style-control">
+                <label>圆圈大小系数 <span id="sizeValue">1.0</span></label>
+                <input type="range" id="sizeFactor" min="0.3" max="2.5" step="0.01" value="1.0">
+            </div>
+            <div class="legend-sample">
+                <div class="legend-circle" id="legendCircle"></div>
+                <span>示例样式</span>
+            </div>
+        </div>
+
+        <div class="sidebar-section">
+            <h3>📸 透明背景导出 (适合PPT)</h3>
+            <div class="download-buttons">
+                <div class="download-row">
+                    <button id="downloadTransparentPNGStations">📷 透明PNG (仅站点)</button>
+                    <button id="downloadTransparentPNGStationsLines">📷 透明PNG (站点+轨道)</button>
+                </div>
+                <div class="download-row">
+                    <button id="downloadTransparentPNGFull">📷 透明PNG (完整)</button>
+                    <button id="downloadSVGStations">🎨 SVG矢量 (仅站点)</button>
+                </div>
+                <div class="download-row">
+                    <button id="downloadSVGStationsLines">🎨 SVG矢量 (站点+轨道)</button>
+                    <button id="downloadGeoJSON">🗺️ GeoJSON数据</button>
+                </div>
+            </div>
+            <div class="export-note">
+                💡 PNG为透明背景，可直接插入PPT；SVG为矢量格式，可无损缩放
+            </div>
+        </div>
+    </div>
+    <div class="map-container">
+        <div id="map"></div>
+        <div class="status-badge" id="statusBadge">初始化中...</div>
+    </div>
+</div>
+
+<script>
+    // 全局变量
+    let map;
+    let subwayLinesLayer = null;
+    let allStationsLayer = null;
+    let selectedStationsLayer = null;
+    let stationsGeoJson = null;
+    let stationPropsMap = new Map();
+    let allStationNames = new Set();
+    
+    // 反向映射
+    let lineToStationsMap = new Map();
+    let ringToStationsMap = new Map();
+    let districtToStationsMap = new Map();
+    let zoneToStationsMap = new Map();
+    
+    // 筛选条件存储
+    let uploadStationSet = new Set();
+    let selectedStationsFromLine = new Set();
+    let selectedStationsFromRing = new Set();
+    let selectedStationsFromDistrict = new Set();
+    let selectedStationsFromZone = new Set();
+    
+    let currentSelectedNames = new Set();
+    
+    // 当前选中的筛选器值
+    let currentLine = '';
+    let currentRing = '';
+    let currentDistrict = '';
+    let currentZone = '';
+    
+    // 样式变量
+    let bubbleColor = '#3b82f6';
+    let bubbleOpacity = 0.85;
+    let strokeColor = '#ffffff';
+    let strokeWidth = 1.5;
+    let sizeFactor = 1.0;
+
+    // 线路颜色映射
+    const subwayLineColors = {
+        "1号线": "#A4343A", "八通线": "#A4343A",
+        "2号线": "#004B87",
+        "4号线": "#008C95", "大兴线": "#008C95",
+        "5号线": "#AA0061",
+        "6号线": "#B1783E",
+        "7号线": "#FFC56E",
+        "8号线": "#009B6B",
+        "9号线": "#97D700",
+        "10号线": "#0092BC",
+        "11号线": "#ED7967",
+        "13号线": "#F9E300",
+        "14号线": "#CA9AAD",
+        "15号线": "#652D90",
+        "16号线": "#6B8E23",
+        "17号线": "#00A9A7",
+        "19号线": "#D5A3A3",
+        "亦庄线": "#D0006F",
+        "房山线": "#F47321",
+        "燕房线": "#D86018",
+        "昌平线": "#D986BA",
+        "首都机场线": "#A192B2",
+        "大兴机场线": "#004A99",
+        "S1线": "#A45A2A",
+        "西郊线": "#E2B2D1"
+    };
+    
+    function getLineColor(lineName) {
+        if (!lineName) return "#aaa";
+        for (let [key, color] of Object.entries(subwayLineColors)) {
+            if (lineName.includes(key) || key.includes(lineName)) return color;
+        }
+        return "#aaa";
+    }
+
+    // 初始化地图
+    function initMap() {
+        map = L.map('map').setView([39.9042, 116.4074], 10);
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a> & CartoDB',
+            subdomains: 'abcd',
+            maxZoom: 19
+        }).addTo(map);
+    }
+
+    // 加载线路
+    async function loadLines() {
+        try {
+            const resp = await fetch('2025年底-线路909km-现状.json');
+            if (!resp.ok) throw new Error('线路文件加载失败');
+            const linesGeoJson = await resp.json();
+            if (subwayLinesLayer) map.removeLayer(subwayLinesLayer);
+            subwayLinesLayer = L.geoJSON(linesGeoJson, {
+                style: function(feature) {
+                    let lineName = feature.properties?.name || feature.properties?.线路名称 || feature.properties?.line || "";
+                    let color = getLineColor(lineName);
+                    return { color: color, weight: 2.5, opacity: 0.8 };
+                },
+                onEachFeature: (f, l) => {
+                    let name = f.properties?.name || f.properties?.线路名称 || "未知线路";
+                    l.bindTooltip(name, { sticky: true });
+                }
+            }).addTo(map);
+        } catch (e) {
+            console.warn("线路加载失败", e);
+        }
+    }
+
+    // 内嵌CSV数据
+    const embeddedCSVContent = `stations,级别,区县,分区,环路,线路
+陶然亭,街区级,西城区,核心区,二环以内,4号线
+天桥,街区级,东城区,核心区,二环以内,8号线
+天坛东门,街区级,东城区,核心区,二环以内,5号线
+菜市口,区域级,西城区,核心区,二环以内,4号线、7号线
+虎坊桥,街区级,西城区,核心区,二环以内,7号线
+广安门内,街区级,西城区,核心区,二环以内,7号线
+珠市口,区域级,西城区,核心区,二环以内,7号线、8号线
+桥湾,街区级,东城区,核心区,二环以内,7号线
+磁器口,区域级,东城区,核心区,二环以内,5号线、7号线
+广渠门内,街区级,东城区,核心区,二环以内,7号线
+长椿街,街区级,西城区,核心区,二环以内,2号线
+宣武门,区域级,西城区,核心区,二环以内,2号线、4号线
+和平门,街区级,西城区,核心区,二环以内,2号线
+前门,城市级,东城区,核心区,二环以内,2号线、8号线
+崇文门,区域级,东城区,核心区,二环以内,2号线、5号线
+北京站,枢纽级,东城区,核心区,二环以内,2号线
+西单,城市级,西城区,核心区,二环以内,1号线、4号线
+复兴门,城市级,西城区,核心区,二环以内,1号线、2号线
+天安门西,区域级,西城区,核心区,二环以内,1号线
+天安门东,区域级,东城区,核心区,二环以内,1号线
+王府井,城市级,东城区,核心区,二环以内,1号线、8号线
+东单,区域级,东城区,核心区,二环以内,1号线、5号线
+建国门,区域级,东城区,核心区,二环以内,1号线、2号线
+灵境胡同,街区级,西城区,核心区,二环以内,4号线
+灯市口,街区级,东城区,核心区,二环以内,5号线
+阜成门,区域级,西城区,核心区,二环以内,2号线
+西四,街区级,西城区,核心区,二环以内,4号线
+东四,区域级,东城区,核心区,二环以内,5号线、6号线
+中国美术馆,街区级,东城区,核心区,二环以内,8号线
+平安里,城市级,西城区,核心区,二环以内,4号线、6号线、19号线
+南锣鼓巷,区域级,东城区,核心区,二环以内,6号线、8号线
+北海北,街区级,西城区,核心区,二环以内,6号线
+张自忠路,街区级,东城区,核心区,二环以内,5号线
+东四十条,区域级,东城区,核心区,二环以内,2号线、3号线
+什刹海,区域级,东城区,核心区,二环以内,8号线
+新街口,街区级,西城区,核心区,二环以内,4号线
+北新桥,区域级,东城区,核心区,二环以内,5号线、首都机场线
+东直门,城市级,东城区,核心区,二环以内,2号线、13号线、首都机场线
+鼓楼大街,街区级,东城区,核心区,二环以内,2号线、8号线
+安定门,街区级,东城区,核心区,二环以内,2号线
+雍和宫,街区级,东城区,核心区,二环以内,2号线、5号线
+牛街,街区级,西城区,核心区,二环以内,19号线
+金鱼胡同,区域级,东城区,核心区,二环以内,8号线
+太平桥,街区级,西城区,核心区,二环以内,19号线
+东管头南,街区级,丰台区,城四区,二环三环之间,16号线、房山线
+木樨园,区域级,东城区,核心区,二环三环之间,8号线
+刘家窑,区域级,丰台区,城四区,二环三环之间,5号线
+北京南站,枢纽级,丰台区,城四区,二环三环之间,4号线、14号线
+景泰,街区级,东城区,核心区,二环三环之间,14号线
+蒲黄榆,区域级,丰台区,城四区,二环三环之间,5号线、14号线
+方庄,街区级,丰台区,城四区,二环三环之间,14号线
+永定门外,街区级,东城区,核心区,二环三环之间,8号线、14号线
+潘家园,街区级,朝阳区,城四区,二环三环之间,10号线
+六里桥东,街区级,丰台区,城四区,二环三环之间,9号线
+达官营,区域级,西城区,核心区,二环三环之间,7号线、16号线
+湾子,街区级,西城区,核心区,二环三环之间,7号线
+广渠门外,街区级,东城区,核心区,二环三环之间,7号线、17号线
+北京西站,枢纽级,丰台区,城四区,二环三环之间,7号线、9号线
+莲花桥,街区级,海淀区,城四区,二环三环之间,10号线
+南礼士路,街区级,西城区,核心区,二环三环之间,1号线
+木樨地,街区级,西城区,核心区,二环三环之间,1号线、16号线
+军事博物馆,区域级,海淀区,城四区,二环三环之间,1号线、9号线
+永安里,区域级,朝阳区,城四区,二环三环之间,1号线、17号线
+甘家口,街区级,西城区,核心区,二环三环之间,16号线
+东大桥,城市级,朝阳区,城四区,二环三环之间,6号线、17号线
+白堆子,街区级,海淀区,城四区,二环三环之间,9号线
+朝阳门,城市级,东城区,核心区,二环以内,2号线、6号线
+车公庄西,街区级,西城区,核心区,二环三环之间,6号线
+车公庄,区域级,西城区,核心区,二环以内,2号线、6号线
+白石桥南,区域级,海淀区,城四区,二环三环之间,6号线、9号线
+花园桥,街区级,海淀区,城四区,二环三环之间,6号线
+动物园,街区级,西城区,核心区,二环三环之间,4号线
+西直门,枢纽级,西城区,核心区,二环以内,2号线、4号线、13号线
+国家图书馆,区域级,海淀区,城四区,二环三环之间,4号线、9号线、16号线
+万寿寺,街区级,海淀区,城四区,二环三环之间,16号线
+积水潭,区域级,西城区,核心区,二环以内,2号线、19号线
+安德里北街,街区级,东城区,核心区,二环三环之间,8号线
+魏公村,街区级,海淀区,城四区,二环三环之间,4号线
+柳芳,街区级,朝阳区,城四区,二环三环之间,13号线
+和平里北街,街区级,东城区,核心区,二环三环之间,5号线
+大钟寺,区域级,海淀区,城四区,二环三环之间,12号线、13号线
+和平西桥,街区级,朝阳区,城四区,二环三环之间,5号线、12号线
+光熙门,街区级,朝阳区,城四区,二环三环之间,12号线、13号线
+东管头,区域级,丰台区,城四区,二环三环之间,14号线
+菜户营,街区级,丰台区,城四区,二环三环之间,14号线
+丽泽商务区,城市级,丰台区,城四区,二环三环之间,14号线、16号线
+西铁营,街区级,丰台区,城四区,二环三环之间,14号线
+景风门,区域级,丰台区,城四区,二环三环之间,14号线、19号线
+玉渊潭东门,街区级,西城区,核心区,二环三环之间,16号线
+红莲南路,街区级,西城区,核心区,二环三环之间,16号线
+二里沟,街区级,西城区,核心区,二环三环之间,6号线、16号线`;
+
+    // 加载站点数据
+    async function loadStationsAndProps() {
+        try {
+            const stationResp = await fetch('现状423座车站.json');
+            if (!stationResp.ok) throw new Error('站点GeoJSON加载失败');
+            stationsGeoJson = await stationResp.json();
+            stationsGeoJson.features.forEach(f => {
+                if (f.properties.站名 && !f.properties.站点) f.properties.站点 = f.properties.站名;
+                let name = f.properties.站点;
+                if (name) allStationNames.add(name.trim());
+            });
+
+            const cleanCSV = embeddedCSVContent.replace(/^\uFEFF/, '');
+            const parseResult = Papa.parse(cleanCSV, { header: true, skipEmptyLines: true });
+            
+            for (let row of parseResult.data) {
+                let name = row['stations'] || row['站点'] || row['站名'];
+                if (!name) continue;
+                name = name.trim();
+                let lineStr = row['线路'] || '';
+                let ring = row['环路'] || '';
+                let district = row['区县'] || '';
+                let zone = row['分区'] || '';
+                
+                stationPropsMap.set(name, {
+                    级别: row['级别'] || '',
+                    区县: district,
+                    分区: zone,
+                    环路: ring,
+                    线路: lineStr
+                });
+                
+                let lines = lineStr.split(/[、,，]/).map(l => l.trim()).filter(l => l);
+                for (let line of lines) {
+                    if (!lineToStationsMap.has(line)) lineToStationsMap.set(line, new Set());
+                    lineToStationsMap.get(line).add(name);
+                }
+                
+                if (ring) {
+                    if (!ringToStationsMap.has(ring)) ringToStationsMap.set(ring, new Set());
+                    ringToStationsMap.get(ring).add(name);
+                }
+                if (district) {
+                    if (!districtToStationsMap.has(district)) districtToStationsMap.set(district, new Set());
+                    districtToStationsMap.get(district).add(name);
+                }
+                if (zone) {
+                    if (!zoneToStationsMap.has(zone)) zoneToStationsMap.set(zone, new Set());
+                    zoneToStationsMap.get(zone).add(name);
+                }
+            }
+            
+            stationsGeoJson.features.forEach(f => {
+                let name = f.properties.站点;
+                if (name && !stationPropsMap.has(name)) {
+                    stationPropsMap.set(name, { 级别: '', 区县: '', 分区: '', 环路: '', 线路: '' });
+                }
+            });
+            
+            populateDropdowns();
+            document.getElementById('statusBadge').innerText = `✅ 加载完成 ${allStationNames.size} 个站点`;
+            return true;
+        } catch (err) {
+            console.error(err);
+            document.getElementById('statusBadge').innerText = "❌ 数据加载失败";
+            return false;
+        }
+    }
+
+    function populateDropdowns() {
+        const linesSet = Array.from(lineToStationsMap.keys()).sort();
+        const lineSelect = document.getElementById('lineSelect');
+        lineSelect.innerHTML = '<option value="">-- 请选择线路 --</option>';
+        linesSet.forEach(line => {
+            const option = document.createElement('option');
+            option.value = line;
+            option.text = line;
+            lineSelect.appendChild(option);
+        });
+        
+        const ringsSet = Array.from(ringToStationsMap.keys()).sort();
+        const ringOrder = ["二环以内","二环三环之间","三环四环之间","四环五环之间","五环至六环","六环外"];
+        ringsSet.sort((a,b) => ringOrder.indexOf(a) - ringOrder.indexOf(b));
+        const ringSelect = document.getElementById('ringSelect');
+        ringSelect.innerHTML = '<option value="">-- 请选择环路 --</option>';
+        ringsSet.forEach(ring => {
+            const option = document.createElement('option');
+            option.value = ring;
+            option.text = ring;
+            ringSelect.appendChild(option);
+        });
+        
+        const districtsSet = Array.from(districtToStationsMap.keys()).sort();
+        const districtSelect = document.getElementById('districtSelect');
+        districtSelect.innerHTML = '<option value="">-- 请选区县 --</option>';
+        districtsSet.forEach(district => {
+            const option = document.createElement('option');
+            option.value = district;
+            option.text = district;
+            districtSelect.appendChild(option);
+        });
+        
+        const zonesSet = Array.from(zoneToStationsMap.keys()).sort();
+        const zoneSelect = document.getElementById('zoneSelect');
+        zoneSelect.innerHTML = '<option value="">-- 请选择分区 --</option>';
+        zonesSet.forEach(zone => {
+            const option = document.createElement('option');
+            option.value = zone;
+            option.text = zone;
+            zoneSelect.appendChild(option);
+        });
+    }
+    
+    function buildStationList(containerId, stations, selectedSet) {
+        const container = document.getElementById(containerId);
+        if (!container) return;
+        const stationsArray = Array.from(stations).sort();
+        container.innerHTML = '';
+        stationsArray.forEach(station => {
+            const div = document.createElement('div');
+            div.className = 'station-item';
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.value = station;
+            checkbox.id = `${containerId}_${station.replace(/\s/g, '_')}`;
+            checkbox.checked = selectedSet.has(station);
+            const label = document.createElement('label');
+            label.htmlFor = checkbox.id;
+            label.textContent = station;
+            div.appendChild(checkbox);
+            div.appendChild(label);
+            container.appendChild(div);
+        });
+        
+        container.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            cb.addEventListener('change', (e) => {
+                if (e.target.checked) selectedSet.add(e.target.value);
+                else selectedSet.delete(e.target.value);
+            });
+        });
+    }
+    
+    function onLineChange() {
+        const lineSelect = document.getElementById('lineSelect');
+        currentLine = lineSelect.value;
+        const cascadeGroup = document.getElementById('stationCascadeGroup');
+        if (!currentLine || !lineToStationsMap.has(currentLine)) {
+            cascadeGroup.style.display = 'none';
+            selectedStationsFromLine.clear();
+            return;
+        }
+        buildStationList('stationChecklist', lineToStationsMap.get(currentLine), selectedStationsFromLine);
+        cascadeGroup.style.display = 'block';
+    }
+    
+    function onRingChange() {
+        const ringSelect = document.getElementById('ringSelect');
+        currentRing = ringSelect.value;
+        const cascadeGroup = document.getElementById('ringCascadeGroup');
+        if (!currentRing || !ringToStationsMap.has(currentRing)) {
+            cascadeGroup.style.display = 'none';
+            selectedStationsFromRing.clear();
+            return;
+        }
+        buildStationList('ringStationChecklist', ringToStationsMap.get(currentRing), selectedStationsFromRing);
+        cascadeGroup.style.display = 'block';
+    }
+    
+    function onDistrictChange() {
+        const districtSelect = document.getElementById('districtSelect');
+        currentDistrict = districtSelect.value;
+        const cascadeGroup = document.getElementById('districtCascadeGroup');
+        if (!currentDistrict || !districtToStationsMap.has(currentDistrict)) {
+            cascadeGroup.style.display = 'none';
+            selectedStationsFromDistrict.clear();
+            return;
+        }
+        buildStationList('districtStationChecklist', districtToStationsMap.get(currentDistrict), selectedStationsFromDistrict);
+        cascadeGroup.style.display = 'block';
+    }
+    
+    function onZoneChange() {
+        const zoneSelect = document.getElementById('zoneSelect');
+        currentZone = zoneSelect.value;
+        const cascadeGroup = document.getElementById('zoneCascadeGroup');
+        if (!currentZone || !zoneToStationsMap.has(currentZone)) {
+            cascadeGroup.style.display = 'none';
+            selectedStationsFromZone.clear();
+            return;
+        }
+        buildStationList('zoneStationChecklist', zoneToStationsMap.get(currentZone), selectedStationsFromZone);
+        cascadeGroup.style.display = 'block';
+    }
+    
+    function applyFilters() {
+        let baseSet = uploadStationSet.size > 0 ? uploadStationSet : allStationNames;
+        let resultSet = new Set();
+        
+        for (let name of baseSet) {
+            const props = stationPropsMap.get(name);
+            if (!props) continue;
+            let match = true;
+            if (selectedStationsFromLine.size > 0 && !selectedStationsFromLine.has(name)) match = false;
+            if (match && selectedStationsFromRing.size > 0 && !selectedStationsFromRing.has(name)) match = false;
+            if (match && selectedStationsFromDistrict.size > 0 && !selectedStationsFromDistrict.has(name)) match = false;
+            if (match && selectedStationsFromZone.size > 0 && !selectedStationsFromZone.has(name)) match = false;
+            if (match) resultSet.add(name);
+        }
+        
+        currentSelectedNames = resultSet;
+        renderSelectedStations();
+        document.getElementById('statsInfo').innerHTML = `当前选中: ${currentSelectedNames.size} 个站点`;
+    }
+    
+    function resetAll() {
+        uploadStationSet.clear();
+        selectedStationsFromLine.clear();
+        selectedStationsFromRing.clear();
+        selectedStationsFromDistrict.clear();
+        selectedStationsFromZone.clear();
+        
+        document.getElementById('lineSelect').value = '';
+        document.getElementById('ringSelect').value = '';
+        document.getElementById('districtSelect').value = '';
+        document.getElementById('zoneSelect').value = '';
+        
+        document.getElementById('stationCascadeGroup').style.display = 'none';
+        document.getElementById('ringCascadeGroup').style.display = 'none';
+        document.getElementById('districtCascadeGroup').style.display = 'none';
+        document.getElementById('zoneCascadeGroup').style.display = 'none';
+        
+        document.getElementById('fileInfo').innerHTML = '未上传文件';
+        document.getElementById('uploadPreview').style.display = 'none';
+        
+        currentSelectedNames.clear();
+        renderSelectedStations();
+        document.getElementById('statsInfo').innerHTML = `当前选中: 0 个站点`;
+    }
+    
+    function renderAllStations() {
+        if (!stationsGeoJson) return;
+        if (allStationsLayer) map.removeLayer(allStationsLayer);
+        allStationsLayer = L.geoJSON(stationsGeoJson, {
+            pointToLayer: (f, latlng) => {
+                return L.circleMarker(latlng, {
+                    radius: 3,
+                    fillColor: "#a0a0a0",
+                    color: "#cccccc",
+                    weight: 0.5,
+                    fillOpacity: 0.4,
+                    interactive: false
+                });
+            }
+        }).addTo(map);
+    }
+
+    function renderSelectedStations() {
+        if (selectedStationsLayer) map.removeLayer(selectedStationsLayer);
+        if (!stationsGeoJson || currentSelectedNames.size === 0) return;
+        
+        const selectedFeatures = stationsGeoJson.features.filter(f => {
+            let name = f.properties.站点;
+            return name && currentSelectedNames.has(name);
+        });
+        if (selectedFeatures.length === 0) return;
+        
+        selectedStationsLayer = L.geoJSON({ type: "FeatureCollection", features: selectedFeatures }, {
+            pointToLayer: (f, latlng) => {
+                let radius = 6 * sizeFactor;
+                return L.circleMarker(latlng, {
+                    radius: Math.max(3, radius),
+                    fillColor: bubbleColor,
+                    color: strokeColor,
+                    weight: strokeWidth,
+                    fillOpacity: bubbleOpacity,
+                    opacity: 1
+                });
+            },
+            onEachFeature: (f, layer) => {
+                let name = f.properties.站点;
+                let props = stationPropsMap.get(name) || {};
+                layer.bindPopup(`<b>${name}</b><br>🚉 线路: ${props.线路 || '无'}<br>📍 区县: ${props.区县 || '未知'}`);
+            }
+        }).addTo(map);
+    }
+
+    function handleUploadCSV(file) {
+        Papa.parse(file, {
+            header: false,
+            skipEmptyLines: true,
+            complete: (results) => {
+                let data = results.data;
+                if (data.length === 0) { alert('CSV文件为空'); return; }
+                const firstRow = data[0];
+                let isHeader = false;
+                let stationColIndex = -1;
+                if (firstRow && firstRow.length > 0) {
+                    const headerLower = firstRow.map(cell => String(cell).toLowerCase());
+                    for (let i = 0; i < headerLower.length; i++) {
+                        if (/站点|站名|stations|车站/.test(headerLower[i])) {
+                            isHeader = true;
+                            stationColIndex = i;
+                            break;
+                        }
+                    }
+                }
+                if (stationColIndex === -1) stationColIndex = 0;
+                let startRow = isHeader ? 1 : 0;
+                let stationNames = new Set();
+                for (let i = startRow; i < data.length; i++) {
+                    let row = data[i];
+                    if (!row || row.length === 0) continue;
+                    let name = row[stationColIndex];
+                    if (!name) continue;
+                    name = String(name).trim();
+                    if (allStationNames.has(name)) stationNames.add(name);
+                }
+                const previewDiv = document.getElementById('uploadPreview');
+                if (stationNames.size === 0) {
+                    alert('CSV中未找到匹配的站点名称');
+                    previewDiv.style.display = 'none';
+                    return;
+                }
+                uploadStationSet = stationNames;
+                previewDiv.innerHTML = `✅ 匹配到 ${stationNames.size} 个站点`;
+                previewDiv.style.display = 'block';
+                document.getElementById('fileInfo').innerHTML = `已加载 ${stationNames.size} 个站点`;
+                applyFilters();
+            },
+            error: (err) => { alert('CSV解析失败: ' + err.message); }
+        });
+    }
+    
+    function applyStyleAndRedraw() {
+        bubbleColor = document.getElementById('bubbleColor').value;
+        document.getElementById('colorPreview').innerText = bubbleColor;
+        bubbleOpacity = parseFloat(document.getElementById('opacitySlider').value);
+        document.getElementById('opacityValue').innerText = bubbleOpacity.toFixed(2);
+        strokeColor = document.getElementById('strokeColor').value;
+        document.getElementById('strokePreview').innerText = strokeColor;
+        strokeWidth = parseFloat(document.getElementById('strokeWidth').value);
+        document.getElementById('strokeWidthValue').innerText = strokeWidth;
+        sizeFactor = parseFloat(document.getElementById('sizeFactor').value);
+        document.getElementById('sizeValue').innerText = sizeFactor.toFixed(2);
+        let legendCircle = document.getElementById('legendCircle');
+        legendCircle.style.backgroundColor = bubbleColor;
+        legendCircle.style.border = `${strokeWidth}px solid ${strokeColor}`;
+        legendCircle.style.opacity = bubbleOpacity;
+        if (currentSelectedNames.size > 0) renderSelectedStations();
+    }
+
+    // ========== 透明背景截图核心功能 ==========
+    const mapContainer = document.querySelector('.map-container');
+    
+    // 创建临时图层用于透明截图
+    async function captureTransparent(hideLines = false, hideStations = false, hideAllStations = false) {
+        // 保存原始地图背景设置
+        const mapDiv = document.getElementById('map');
+        const originalBg = mapDiv.style.backgroundColor;
+        const originalTileLayers = [];
+        
+        // 隐藏所有瓦片图层（底图）
+        map.eachLayer(layer => {
+            if (layer instanceof L.TileLayer) {
+                originalTileLayers.push(layer);
+                map.removeLayer(layer);
+            }
+        });
+        
+        // 设置透明背景
+        mapDiv.style.backgroundColor = 'transparent';
+        
+        // 控制图层显示
+        let lineVisible = true, selectedVisible = true, allVisible = true;
+        if (subwayLinesLayer && hideLines) { lineVisible = map.hasLayer(subwayLinesLayer); if (lineVisible) map.removeLayer(subwayLinesLayer); }
+        if (selectedStationsLayer && hideStations) { selectedVisible = map.hasLayer(selectedStationsLayer); if (selectedVisible) map.removeLayer(selectedStationsLayer); }
+        if (allStationsLayer && hideAllStations) { allVisible = map.hasLayer(allStationsLayer); if (allVisible) map.removeLayer(allStationsLayer); }
+        
+        await new Promise(r => setTimeout(r, 200));
+        
+        try {
+            const canvas = await html2canvas(mapContainer, {
+                scale: 3,  // 3倍分辨率，更清晰
+                backgroundColor: null,  // 关键：透明背景
+                useCORS: false,
+                logging: false,
+                allowTaint: false
+            });
+            return canvas;
+        } finally {
+            // 恢复瓦片图层
+            originalTileLayers.forEach(layer => map.addLayer(layer));
+            mapDiv.style.backgroundColor = originalBg;
+            if (subwayLinesLayer && hideLines && lineVisible) map.addLayer(subwayLinesLayer);
+            if (selectedStationsLayer && hideStations && selectedVisible) map.addLayer(selectedStationsLayer);
+            if (allStationsLayer && hideAllStations && allVisible) map.addLayer(allStationsLayer);
+        }
+    }
+    
+    // 导出SVG（通过提取地图上的要素）
+    function exportToSVG(includeLines = false, includeStations = true) {
+        if (currentSelectedNames.size === 0 && includeStations) {
+            alert('当前没有选中的站点');
+            return;
+        }
+        
+        // 获取当前地图视图范围
+        const bounds = map.getBounds();
+        const center = map.getCenter();
+        const zoom = map.getZoom();
+        
+        // 创建SVG容器
+        const svgNS = "http://www.w3.org/2000/svg";
+        const svg = document.createElementNS(svgNS, "svg");
+        const width = 1200;
+        const height = 900;
+        svg.setAttribute("width", width);
+        svg.setAttribute("height", height);
+        svg.setAttribute("viewBox", `0 0 ${width} ${height}`);
+        svg.style.backgroundColor = "transparent";
+        
+        // 坐标转换函数
+        function latLngToSVG(latlng) {
+            const point = map.latLngToContainerPoint(latlng);
+            const mapRect = mapContainer.getBoundingClientRect();
+            const svgRect = svg.getBoundingClientRect();
+            return { x: point.x, y: point.y };
+        }
+        
+        // 绘制站点圆圈
+        if (includeStations && currentSelectedNames.size > 0) {
+            const selectedFeatures = stationsGeoJson.features.filter(f => {
+                let name = f.properties.站点;
+                return name && currentSelectedNames.has(name);
+            });
+            
+            selectedFeatures.forEach(feature => {
+                const coords = feature.geometry.coordinates;
+                const latlng = L.latLng(coords[1], coords[0]);
+                const point = map.latLngToContainerPoint(latlng);
+                const radius = 8 * sizeFactor;
+                
+                const circle = document.createElementNS(svgNS, "circle");
+                circle.setAttribute("cx", point.x);
+                circle.setAttribute("cy", point.y);
+                circle.setAttribute("r", radius);
+                circle.setAttribute("fill", bubbleColor);
+                circle.setAttribute("fill-opacity", bubbleOpacity);
+                circle.setAttribute("stroke", strokeColor);
+                circle.setAttribute("stroke-width", strokeWidth);
+                circle.setAttribute("stroke-opacity", 1);
+                svg.appendChild(circle);
+                
+                // 添加站点名称标签（可选）
+                const text = document.createElementNS(svgNS, "text");
+                text.setAttribute("x", point.x + radius + 3);
+                text.setAttribute("y", point.y + 4);
+                text.setAttribute("font-size", "10");
+                text.setAttribute("font-family", "sans-serif");
+                text.setAttribute("fill", "#333");
+                text.textContent = feature.properties.站点;
+                svg.appendChild(text);
+            });
+        }
+        
+        // 绘制线路（简化版，只绘制选中的站点之间的连线）
+        if (includeLines && subwayLinesLayer) {
+            // 获取所有线路图层中的线段
+            subwayLinesLayer.eachLayer(layer => {
+                if (layer.feature && layer.feature.geometry) {
+                    const coords = layer.feature.geometry.coordinates;
+                    if (coords && coords.length > 0) {
+                        const points = coords.map(coord => {
+                            const pt = map.latLngToContainerPoint([coord[1], coord[0]]);
+                            return `${pt.x},${pt.y}`;
+                        });
+                        if (points.length > 1) {
+                            const polyline = document.createElementNS(svgNS, "polyline");
+                            polyline.setAttribute("points", points.join(" "));
+                            polyline.setAttribute("fill", "none");
+                            polyline.setAttribute("stroke", layer.options.color || "#aaa");
+                            polyline.setAttribute("stroke-width", "2.5");
+                            polyline.setAttribute("stroke-opacity", "0.7");
+                            svg.appendChild(polyline);
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 序列化SVG
+        const serializer = new XMLSerializer();
+        let svgString = serializer.serializeToString(svg);
+        svgString = '<?xml version="1.0" encoding="UTF-8"?>\n' + svgString;
+        
+        // 下载
+        const blob = new Blob([svgString], { type: "image/svg+xml" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `subway_export_${new Date().toISOString().slice(0,19)}.svg`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+    
+    async function downloadTransparentPNGStations() {
+        if (currentSelectedNames.size === 0) { alert('当前没有选中的站点'); return; }
+        if (!selectedStationsLayer || !map.hasLayer(selectedStationsLayer)) renderSelectedStations();
+        const canvas = await captureTransparent(true, false, true);
+        const link = document.createElement('a');
+        link.download = `stations_transparent_${new Date().toISOString().slice(0,19)}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+    
+    async function downloadTransparentPNGStationsLines() {
+        if (currentSelectedNames.size === 0) { alert('当前没有选中的站点'); return; }
+        if (!selectedStationsLayer || !map.hasLayer(selectedStationsLayer)) renderSelectedStations();
+        const canvas = await captureTransparent(false, false, true);
+        const link = document.createElement('a');
+        link.download = `stations_lines_transparent_${new Date().toISOString().slice(0,19)}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+    
+    async function downloadTransparentPNGFull() {
+        if (allStationsLayer && !map.hasLayer(allStationsLayer)) map.addLayer(allStationsLayer);
+        if (selectedStationsLayer && !map.hasLayer(selectedStationsLayer) && currentSelectedNames.size > 0) map.addLayer(selectedStationsLayer);
+        const canvas = await captureTransparent(false, false, false);
+        const link = document.createElement('a');
+        link.download = `full_transparent_${new Date().toISOString().slice(0,19)}.png`;
+        link.href = canvas.toDataURL('image/png');
+        link.click();
+    }
+    
+    function downloadSVGStations() {
+        exportToSVG(false, true);
+    }
+    
+    function downloadSVGStationsLines() {
+        exportToSVG(true, true);
+    }
+    
+    function downloadGeoJSON() {
+        if (currentSelectedNames.size === 0) { alert('当前没有选中的站点'); return; }
+        const selectedFeatures = stationsGeoJson.features.filter(f => {
+            let name = f.properties.站点;
+            return name && currentSelectedNames.has(name);
+        });
+        const geojson = { type: "FeatureCollection", features: selectedFeatures };
+        const dataStr = JSON.stringify(geojson, null, 2);
+        const blob = new Blob([dataStr], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.download = `stations_${new Date().toISOString().slice(0,19)}.geojson`;
+        link.href = url;
+        link.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function bindEvents() {
+        const uploadArea = document.getElementById('uploadArea');
+        const fileInput = document.getElementById('csvUpload');
+        uploadArea.addEventListener('click', () => fileInput.click());
+        fileInput.addEventListener('change', (e) => { if (e.target.files.length) handleUploadCSV(e.target.files[0]); });
+        uploadArea.addEventListener('dragover', (e) => { e.preventDefault(); uploadArea.style.background = '#eef2ff'; });
+        uploadArea.addEventListener('dragleave', () => { uploadArea.style.background = '#f8fafc'; });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.background = '#f8fafc';
+            const file = e.dataTransfer.files[0];
+            if (file && file.name.endsWith('.csv')) handleUploadCSV(file);
+            else alert('请上传 CSV 文件');
+        });
+
+        document.getElementById('lineSelect').addEventListener('change', () => { onLineChange(); applyFilters(); });
+        document.getElementById('ringSelect').addEventListener('change', () => { onRingChange(); applyFilters(); });
+        document.getElementById('districtSelect').addEventListener('change', () => { onDistrictChange(); applyFilters(); });
+        document.getElementById('zoneSelect').addEventListener('change', () => { onZoneChange(); applyFilters(); });
+        
+        document.getElementById('applyFilterBtn').addEventListener('click', applyFilters);
+        document.getElementById('resetFilterBtn').addEventListener('click', resetAll);
+
+        document.getElementById('bubbleColor').addEventListener('input', applyStyleAndRedraw);
+        document.getElementById('opacitySlider').addEventListener('input', applyStyleAndRedraw);
+        document.getElementById('strokeColor').addEventListener('input', applyStyleAndRedraw);
+        document.getElementById('strokeWidth').addEventListener('input', applyStyleAndRedraw);
+        document.getElementById('sizeFactor').addEventListener('input', applyStyleAndRedraw);
+
+        // 透明PNG导出
+        document.getElementById('downloadTransparentPNGStations').addEventListener('click', downloadTransparentPNGStations);
+        document.getElementById('downloadTransparentPNGStationsLines').addEventListener('click', downloadTransparentPNGStationsLines);
+        document.getElementById('downloadTransparentPNGFull').addEventListener('click', downloadTransparentPNGFull);
+        
+        // SVG导出
+        document.getElementById('downloadSVGStations').addEventListener('click', downloadSVGStations);
+        document.getElementById('downloadSVGStationsLines').addEventListener('click', downloadSVGStationsLines);
+        
+        // GeoJSON导出
+        document.getElementById('downloadGeoJSON').addEventListener('click', downloadGeoJSON);
+        
+        // 全选和清空按钮
+        document.getElementById('selectAllStations').addEventListener('click', () => {
+            const checkboxes = document.querySelectorAll('#stationChecklist input');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => { cb.checked = !allChecked; if (cb.checked) selectedStationsFromLine.add(cb.value); else selectedStationsFromLine.delete(cb.value); });
+            document.getElementById('selectAllStations').textContent = allChecked ? '全选' : '取消全选';
+        });
+        document.getElementById('selectAllRingStations').addEventListener('click', () => {
+            const checkboxes = document.querySelectorAll('#ringStationChecklist input');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => { cb.checked = !allChecked; if (cb.checked) selectedStationsFromRing.add(cb.value); else selectedStationsFromRing.delete(cb.value); });
+        });
+        document.getElementById('selectAllDistrictStations').addEventListener('click', () => {
+            const checkboxes = document.querySelectorAll('#districtStationChecklist input');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => { cb.checked = !allChecked; if (cb.checked) selectedStationsFromDistrict.add(cb.value); else selectedStationsFromDistrict.delete(cb.value); });
+        });
+        document.getElementById('selectAllZoneStations').addEventListener('click', () => {
+            const checkboxes = document.querySelectorAll('#zoneStationChecklist input');
+            const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+            checkboxes.forEach(cb => { cb.checked = !allChecked; if (cb.checked) selectedStationsFromZone.add(cb.value); else selectedStationsFromZone.delete(cb.value); });
+        });
+        
+        document.getElementById('clearLineStations').addEventListener('click', () => {
+            selectedStationsFromLine.clear();
+            document.querySelectorAll('#stationChecklist input').forEach(cb => cb.checked = false);
+        });
+        document.getElementById('clearRingStations').addEventListener('click', () => {
+            selectedStationsFromRing.clear();
+            document.querySelectorAll('#ringStationChecklist input').forEach(cb => cb.checked = false);
+        });
+        document.getElementById('clearDistrictStations').addEventListener('click', () => {
+            selectedStationsFromDistrict.clear();
+            document.querySelectorAll('#districtStationChecklist input').forEach(cb => cb.checked = false);
+        });
+        document.getElementById('clearZoneStations').addEventListener('click', () => {
+            selectedStationsFromZone.clear();
+            document.querySelectorAll('#zoneStationChecklist input').forEach(cb => cb.checked = false);
+        });
+    }
+
+    async function main() {
+        initMap();
+        await loadStationsAndProps();
+        await loadLines();
+        renderAllStations();
+        bindEvents();
+        applyStyleAndRedraw();
+        document.getElementById('statusBadge').innerText = '就绪 - 选择筛选条件后点击"应用筛选"';
+    }
+    main();
+</script>
+</body>
+</html>
