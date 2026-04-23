@@ -1,0 +1,2607 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>北京市轨道交通客流智慧监测平台</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://unpkg.com/@turf/turf@6.5.0/turf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: "Inter", "Microsoft YaHei", "PingFang SC", "Segoe UI", sans-serif;
+            background: #f5f7fa;
+            overflow-x: hidden;
+        }
+
+        .fixed-title {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 56px;
+            background: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 2000;
+            box-shadow: 0 1px 4px rgba(0, 0, 0, 0.04);
+            border-bottom: 1px solid #e9ecef;
+        }
+
+        .fixed-title-left {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .fixed-title span {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: 1px;
+            color: #1e2a3a;
+        }
+
+        .mode-switcher {
+            display: flex;
+            background: #f1f5f9;
+            border-radius: 8px;
+            padding: 4px;
+        }
+
+        .mode-btn {
+            background: transparent;
+            border: none;
+            padding: 6px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            color: #64748b;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+
+        .mode-btn:hover {
+            color: #1e2a3a;
+        }
+
+        .mode-btn.active {
+            background: #ffffff;
+            color: #3b82f6;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+
+        .compare-nav {
+            position: fixed;
+            top: 56px;
+            left: 0;
+            right: 0;
+            height: 64px;
+            background: #ffffff;
+            border-bottom: 1px solid #e9ecef;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            z-index: 1999;
+            gap: 16px;
+            flex-wrap: wrap;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+        }
+
+        .compare-control-group {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            background: #f8fafc;
+            padding: 6px 16px;
+            border-radius: 40px;
+        }
+
+        .compare-control-group label {
+            font-weight: 600;
+            color: #1e2a3a;
+            font-size: 13px;
+        }
+
+        select,
+        button {
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 30px;
+            padding: 6px 14px;
+            font-size: 13px;
+            cursor: pointer;
+            font-weight: 500;
+            color: #1e2a3a;
+            transition: 0.2s;
+            outline: none;
+        }
+
+        button {
+            background: #3b82f6;
+            color: white;
+            border: none;
+        }
+
+        button:hover {
+            background: #2563eb;
+        }
+
+        .map-container {
+            position: relative;
+            margin-top: 120px;
+            height: calc(100vh - 120px);
+            min-height: 400px;
+            width: 100%;
+            background: #eef2f5;
+            z-index: 10;
+            overflow: hidden;
+        }
+
+        #map {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: #eef2f5;
+            z-index: 0;
+        }
+
+        .left-panel {
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 280px;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(16px);
+            border-radius: 0 24px 0 0;
+            box-shadow: 2px 0 12px rgba(0, 0, 0, 0.02);
+            z-index: 1001;
+            display: flex;
+            flex-direction: column;
+            pointer-events: auto;
+            border-right: 1px solid #e9ecef;
+        }
+
+        .filter-section {
+            padding: 16px 12px;
+            border-bottom: 1px solid #edf2f7;
+        }
+
+        .filter-section h3 {
+            color: #1e2a3a;
+            font-size: 16px;
+            margin: 0 0 12px 0;
+            text-align: center;
+        }
+
+        .filter-buttons {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .filter-main-btn {
+            background: #f1f3f5;
+            border: none;
+            color: #2c3e50;
+            padding: 8px 12px;
+            border-radius: 30px;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            text-align: center;
+        }
+
+        .filter-main-btn:hover {
+            background: #e2e6ea;
+        }
+
+        .top10-section {
+            padding: 12px;
+            background: #f8fafc;
+            flex: 1;
+            overflow-y: auto;
+            border-top: 1px solid #edf2f7;
+        }
+
+        .top10-section h4 {
+            color: #1e2a3a;
+            margin: 0 0 12px 0;
+            font-size: 14px;
+            text-align: center;
+        }
+
+        .sort-toggle-container {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .sort-btn {
+            flex: 1;
+            padding: 6px;
+            font-size: 12px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            background: #f1f5f9;
+            color: #64748b;
+            cursor: pointer;
+            transition: 0.2s;
+            font-weight: 600;
+            text-align: center;
+        }
+
+        .sort-btn:hover {
+            background: #e2e8f0;
+        }
+
+        .sort-btn.active-red {
+            background: #ef4444;
+            color: white;
+            border-color: #ef4444;
+        }
+
+        .sort-btn.active-red:hover {
+            background: #dc2626;
+        }
+
+        .sort-btn.active-blue {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .sort-btn.active-blue:hover {
+            background: #2563eb;
+        }
+
+        .rank-list {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .rank-list li {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 8px 10px;
+            margin-bottom: 6px;
+            background: #ffffff;
+            border-radius: 8px;
+            font-size: 12px;
+            color: #1e2a3a;
+            box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        }
+
+        .rank-number {
+            font-weight: bold;
+            width: 32px;
+        }
+
+        .rank-value {
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 20px;
+            font-size: 11px;
+        }
+
+        .right-unified-panel {
+            position: absolute;
+            top: 20px;
+            right: 16px;
+            width: 250px;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(8px);
+            border-radius: 20px;
+            padding: 12px 14px;
+            z-index: 1000;
+            font-size: 11px;
+            border: 1px solid #e9ecef;
+            pointer-events: auto;
+        }
+
+        .legend-gradient.compare {
+            background: linear-gradient(90deg, #3b82f6, #ffffff, #ef4444);
+        }
+
+        .legend-gradient.current {
+            background: linear-gradient(90deg, #eef2ff, #3b82f6, #1e3a8a);
+        }
+
+        .legend-gradient {
+            height: 6px;
+            border-radius: 4px;
+            margin: 6px 0;
+        }
+
+        .bubble-legend-panel {
+            position: absolute;
+            bottom: 24px;
+            left: 300px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(8px);
+            border-radius: 8px;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid #e9ecef;
+            z-index: 1000;
+            pointer-events: none;
+            min-width: 140px;
+        }
+
+        .bubble-legend-title {
+            font-size: 12px;
+            font-weight: 600;
+            color: #1e2a3a;
+            margin-bottom: 4px;
+        }
+
+        .bubble-legend-subtitle {
+            font-size: 11px;
+            color: #64748b;
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px dashed #cbd5e1;
+        }
+
+        .bubble-legend-items {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .bubble-item {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 12px;
+        }
+
+        .bubble-icon-wrap {
+            width: 32px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        .bubble-circle {
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.8);
+        }
+
+        .bc-blue {
+            background-color: rgba(59, 130, 246, 0.85);
+        }
+
+        .bc-red {
+            background-color: rgba(239, 68, 68, 0.85);
+        }
+
+        .bc-current {
+            background-color: rgba(59, 130, 246, 0.85);
+        }
+
+        .bc-gray {
+            background-color: rgba(148, 163, 184, 0.85);
+        }
+
+        .bubble-value {
+            font-size: 12px;
+            color: #475569;
+            font-family: monospace;
+        }
+
+        .info-badge {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 11px;
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .map-draw-tools {
+            position: absolute;
+            top: 20px;
+            left: 300px;
+            z-index: 1000;
+            display: flex;
+            gap: 10px;
+        }
+
+        .map-draw-btn {
+            background: white;
+            border: 1px solid #cbd5e1;
+            border-radius: 8px;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 600;
+            color: #1e2a3a;
+            box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+            transition: 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .map-draw-btn:hover {
+            background: #f8fafc;
+        }
+
+        .map-draw-btn.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #2563eb;
+        }
+
+        .btn-upload {
+            background: #10b981;
+            color: white;
+            border: none;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 30px;
+            cursor: pointer;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .btn-upload:hover {
+            background: #059669;
+        }
+
+        .dashboard-container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 1.5rem;
+        }
+
+        .dashboard-card {
+            background: white;
+            border-radius: 28px;
+            padding: 1.2rem 1.5rem;
+            margin-bottom: 1.8rem;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+            border: 1px solid #eef2f6;
+        }
+
+        .card-header-flex {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-left: 4px solid #3b82f6;
+            padding-left: 14px;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .card-title {
+            font-size: 1.2rem;
+            font-weight: 600;
+            color: #1e2a3a;
+        }
+
+        .local-controls {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 12px;
+            color: #475569;
+            font-weight: normal;
+            flex-wrap: wrap;
+        }
+
+        .multi-dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .multi-btn,
+        .theme-select {
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            padding: 4px 10px;
+            border-radius: 4px;
+            cursor: pointer;
+            color: #1e2a3a;
+            font-size: 12px;
+            font-weight: 600;
+            transition: 0.2s;
+            outline: none;
+        }
+
+        .multi-btn:hover,
+        .theme-select:hover {
+            background: #e2e8f0;
+        }
+
+        .multi-popup {
+            position: absolute;
+            right: 0;
+            top: 120%;
+            background: white;
+            border: 1px solid #cbd5e1;
+            padding: 10px 14px;
+            border-radius: 8px;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            display: none;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 1100;
+            min-width: 140px;
+            max-height: 280px;
+            overflow-y: auto;
+        }
+
+        .multi-popup.show {
+            display: flex;
+        }
+
+        .year-cb-row {
+            display: flex;
+            align-items: center;
+            justify-content: flex-start;
+            gap: 10px;
+        }
+
+        .year-cb-row label {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            color: #1e2a3a;
+        }
+
+        .year-cb-row input[type="color"] {
+            width: 22px;
+            height: 22px;
+            padding: 0;
+            border: none;
+            background: none;
+            cursor: pointer;
+            border-radius: 4px;
+        }
+
+        .color-pickers {
+            display: flex;
+            gap: 15px;
+            font-size: 12px;
+            color: #475569;
+            align-items: center;
+            font-weight: normal;
+        }
+
+        .color-pickers input[type="color"] {
+            border: none;
+            width: 24px;
+            height: 24px;
+            padding: 0;
+            cursor: pointer;
+            border-radius: 4px;
+            background: none;
+        }
+
+        .chart-row {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            margin-top: 1rem;
+        }
+
+        .chart-box {
+            flex: 1;
+            min-width: 300px;
+            background: #fefefe;
+            border-radius: 20px;
+            padding: 16px;
+            border: 1px solid #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chart-box h4 {
+            font-size: 0.95rem;
+            margin-bottom: 12px;
+            text-align: center;
+            color: #1e2a3a;
+        }
+
+        .canvas-wrapper {
+            position: relative;
+            height: 260px;
+            width: 100%;
+            flex: 1;
+            overflow-x: auto;
+            overflow-y: hidden;
+        }
+
+        .canvas-wrapper::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .canvas-wrapper::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+
+        .canvas-wrapper::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        .canvas-wrapper::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .chart-container {
+            height: 100%;
+        }
+
+        canvas {
+            height: 100% !important;
+            width: 100% !important;
+        }
+
+        .station-selector {
+            margin: 16px 0 8px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .station-selector label {
+            font-weight: 600;
+            font-size: 13px;
+        }
+
+        #singleStationSelect,
+        #hourlyStationSelect {
+            flex: 2;
+            min-width: 180px;
+        }
+
+        .subcategory-popup {
+            position: fixed;
+            left: 280px;
+            top: 150px;
+            width: 240px;
+            background: white;
+            border-radius: 20px;
+            padding: 12px;
+            border: 1px solid #cbd5e1;
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+            z-index: 1100;
+            max-height: 60vh;
+            overflow-y: auto;
+        }
+
+        .popup-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid #edf2f7;
+            padding-bottom: 8px;
+            margin-bottom: 8px;
+        }
+
+        .popup-close {
+            background: none;
+            border: none;
+            font-size: 16px;
+            cursor: pointer;
+            color: #64748b;
+        }
+
+        .popup-close:hover {
+            color: #ef4444;
+        }
+
+        @media (max-width: 900px) {
+            .left-panel {
+                width: 240px;
+            }
+
+            .right-unified-panel {
+                display: none;
+            }
+
+            .map-draw-tools {
+                left: 260px;
+            }
+
+            .bubble-legend-panel {
+                left: 260px;
+            }
+        }
+
+        .show-in-current {
+            display: none;
+        }
+
+        .show-in-compare {
+            display: flex;
+        }
+
+        body[data-mode="current"] .show-in-current {
+            display: flex;
+        }
+
+        body[data-mode="current"] .show-in-current-block {
+            display: block;
+        }
+
+        body[data-mode="current"] .show-in-compare {
+            display: none;
+        }
+
+        body[data-mode="compare"] .show-in-current {
+            display: none;
+        }
+
+        body[data-mode="compare"] .show-in-current-block {
+            display: none;
+        }
+
+        body[data-mode="compare"] .show-in-compare {
+            display: flex;
+        }
+
+        .kpi-row {
+            display: flex;
+            gap: 1.5rem;
+            margin-bottom: 1rem;
+            flex-wrap: wrap;
+        }
+
+        .kpi-card {
+            flex: 1;
+            min-width: 200px;
+            background: linear-gradient(135deg, #eff6ff, #ffffff);
+            border: 1px solid #dbeafe;
+            border-radius: 20px;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 6px rgba(59, 130, 246, 0.05);
+        }
+
+        .kpi-title {
+            font-size: 14px;
+            color: #64748b;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .kpi-value {
+            font-size: 32px;
+            font-weight: 800;
+            color: #1e3a8a;
+        }
+
+        .kpi-unit {
+            font-size: 12px;
+            color: #94a3b8;
+            margin-left: 4px;
+            font-weight: normal;
+        }
+
+        .chart-theme-picker {
+            padding: 4px 8px;
+            border-radius: 6px;
+            border: 1px solid #cbd5e1;
+            background-color: #f8fafc;
+            font-size: 11px;
+            color: #475569;
+            cursor: pointer;
+            outline: none;
+            margin-right: 8px;
+        }
+
+        .chart-theme-picker:hover {
+            background-color: #e2e8f0;
+        }
+
+        /* 单站分时客流控制栏样式 */
+        .hourly-controls {
+            background: #f8fafc;
+            padding: 12px 16px;
+            border-radius: 16px;
+            margin-bottom: 16px;
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 16px;
+        }
+
+        .hourly-control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .hourly-control-group label {
+            font-size: 13px;
+            font-weight: 500;
+            color: #1e2a3a;
+        }
+
+        .toggle-btn {
+            background: #f1f5f9;
+            border: 1px solid #cbd5e1;
+            padding: 4px 12px;
+            border-radius: 20px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: 0.2s;
+        }
+
+        .toggle-btn.active {
+            background: #3b82f6;
+            color: white;
+            border-color: #3b82f6;
+        }
+
+        .upload-dropzone {
+            border: 2px dashed #3b82f6;
+            background: #eff6ff;
+            border-radius: 12px;
+            padding: 24px;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 20px;
+            transition: 0.2s;
+        }
+
+        .upload-dropzone:hover {
+            background: #dbeafe;
+        }
+
+        #hourlyTrendChart {
+            width: 100%;
+            height: 520px;
+        }
+
+        /* 站点搜索框样式 */
+        .station-search-input {
+            width: 200px;
+            padding: 6px 12px;
+            border: 1px solid #cbd5e1;
+            border-radius: 20px;
+            font-size: 13px;
+            outline: none;
+            transition: 0.2s;
+        }
+
+        .station-search-input:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.2);
+        }
+
+        .search-wrapper {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+        }
+    </style>
+</head>
+
+<body data-mode="current">
+
+    <div class="fixed-title">
+        <div class="fixed-title-left">
+            <span>🚇 北京市轨道交通客流智慧监测平台</span>
+        </div>
+        <div class="mode-switcher">
+            <button id="btnModeCurrent" class="mode-btn active">📍 现状客流分析</button>
+            <button id="btnModeCompare" class="mode-btn">📊 历史客流对比</button>
+        </div>
+    </div>
+
+    <div class="compare-nav">
+        <div class="compare-control-group show-in-current">
+            <label>📅 选择年份</label>
+            <select id="yearCurrent">
+                <option value="2026" selected>2026年</option>
+                <option value="2025">2025年</option>
+                <option value="2024">2024年</option>
+                <option value="2023">2023年</option>
+                <option value="2019">2019年</option>
+            </select>
+        </div>
+
+        <div class="compare-control-group show-in-compare">
+            <label>📅 对比年份 B</label>
+            <select id="yearA">
+                <option value="2025" selected>2025年</option>
+                <option value="2026">2026年</option>
+                <option value="2024">2024年</option>
+                <option value="2023">2023年</option>
+                <option value="2019">2019年</option>
+            </select>
+        </div>
+        <div class="compare-control-group show-in-compare">
+            <label>📅 基准年份 A</label>
+            <select id="yearB">
+                <option value="2026" selected>2026年</option>
+                <option value="2025">2025年</option>
+                <option value="2024">2024年</option>
+                <option value="2023">2023年</option>
+                <option value="2019">2019年</option>
+            </select>
+        </div>
+
+        <div class="compare-control-group">
+            <label>📈 客流指标</label>
+            <select id="metricSelect">
+                <option value="全日进站量">全日进站量</option>
+                <option value="全日出站量">全日出站量</option>
+                <option value="全日进出站量">全日进出站量</option>
+                <option value="早高峰进站量">早高峰进站量</option>
+                <option value="早高峰出站量">早高峰出站量</option>
+                <option value="早高峰进出站量">早高峰进出站量</option>
+            </select>
+        </div>
+
+        <div style="display: flex; gap: 10px; margin-left: auto;">
+            <input type="file" id="localDataUpload" multiple accept=".csv,.json,.geojson" style="display:none;">
+            <button id="btnTriggerUpload" class="btn-upload">📂 导入本地数据</button>
+            <button id="refreshBtn">🔄 更新视图</button>
+        </div>
+    </div>
+
+    <div class="map-container">
+        <div id="map"></div>
+
+        <div class="map-draw-tools">
+            <button id="btnDrawPolygon" class="map-draw-btn">📐 多边形选区</button>
+            <button id="btnClearPolygon" class="map-draw-btn" style="display:none; color: #ef4444;">🗑️ 清除所有选区</button>
+        </div>
+
+        <div class="left-panel">
+            <div class="filter-section">
+                <h3>📊 统计范围</h3>
+                <div id="filterButtons" class="filter-buttons"></div>
+            </div>
+
+            <div class="filter-section" style="background: #f8fafc;">
+                <h3 style="margin-bottom: 8px;">🔢 数据筛选</h3>
+                <div style="font-size: 11px; color: #64748b; margin-bottom: 8px; text-align: center;">显示大于设定值 (万人次) 的站点
+                </div>
+                <div style="display: flex; align-items: center; gap: 8px;">
+                    <input type="range" id="minFlowSlider" min="0" max="50" step="0.1" value="0"
+                        style="flex: 1; cursor: pointer;">
+                    <input type="number" id="minFlowInput" value="0" min="0" step="0.1"
+                        style="width: 55px; font-size: 12px; padding: 2px 4px; border: 1px solid #cbd5e1; border-radius: 4px; text-align: center; outline: none;">
+                </div>
+            </div>
+
+            <div class="top10-section">
+                <h4 id="top10Title">📊 站点客流 TOP10</h4>
+                <div class="sort-toggle-container show-in-compare">
+                    <button id="btnGrowth" class="sort-btn active-red">📈 增长前十</button>
+                    <button id="btnDecline" class="sort-btn">📉 缩减前十</button>
+                </div>
+                <div id="top10List">
+                    <ul class="rank-list">
+                        <li>加载中...</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+
+        <div class="right-unified-panel">
+            <div class="legend-section show-in-compare">
+                <div id="legendMapTitle">差值色阶</div>
+                <div class="legend-gradient compare" id="legendGradient"></div>
+                <div id="legendLabels">负值 ← 0 → 正值</div>
+                <div id="metricLegendName" style="font-size:10px; margin-top:6px;">全日进站量差值</div>
+            </div>
+
+            <div class="legend-section show-in-current-block">
+                <div style="font-size:12px; font-weight:700; color:#1e2a3a; margin-bottom:8px;">地图图例说明</div>
+                <div style="font-size:11px; color:#475569; margin-top:6px; display:flex; align-items:center; gap:6px;">
+                    <span>🛤️</span> 线路：轨道极简骨架色
+                </div>
+                <div style="font-size:11px; color:#475569; margin-top:6px; display:flex; align-items:center; gap:6px;">
+                    <span>⏺</span> 气泡：客流规模 (可调色)
+                </div>
+                <div id="metricLegendNameCur" style="font-size:11px; font-weight:600; margin-top:8px; color:#3b82f6;">
+                    全日进站量</div>
+            </div>
+
+            <div class="style-section" style="margin-top: 10px; border-top: 1px solid #e2e8f0; padding-top: 10px;">
+                <h4>🎨 显示样式</h4>
+                <div class="control-group show-in-current-block">
+                    <label>🎨 气泡颜色</label>
+                    <input type="color" id="bubbleColorPicker" value="#3b82f6"
+                        style="border:none; width:20px; height:20px; padding:0; background:none; cursor:pointer;">
+                </div>
+                <div class="control-group"><label>🔘 圆圈大小</label><input type="range" id="sizeSlider" min="0.3" max="2.0"
+                        step="0.01" value="1.0"></div>
+                <div class="control-group"><label>💧 透明度</label><input type="range" id="opacitySlider" min="0.4"
+                        max="1.0" step="0.01" value="0.85"></div>
+            </div>
+        </div>
+
+        <div class="bubble-legend-panel">
+            <div class="bubble-legend-title" id="bubbleLegendTitle">客流规模 (现状)</div>
+            <div class="bubble-legend-subtitle">单位：万人次</div>
+
+            <div class="bubble-legend-items show-in-current-block">
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-current" style="width: 10px; height: 10px;"></div>
+                    </div>
+                    <div class="bubble-value">&lt; 1</div>
+                </div>
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-current" style="width: 18px; height: 18px;"></div>
+                    </div>
+                    <div class="bubble-value">1 ~ 5</div>
+                </div>
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-current" style="width: 28px; height: 28px;"></div>
+                    </div>
+                    <div class="bubble-value">&gt; 5</div>
+                </div>
+            </div>
+
+            <div class="bubble-legend-items show-in-compare">
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-blue" style="width: 28px; height: 28px;"></div>
+                    </div>
+                    <div class="bubble-value">&lt;= -2</div>
+                </div>
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-blue" style="width: 18px; height: 18px;"></div>
+                    </div>
+                    <div class="bubble-value">-2 ~ -1</div>
+                </div>
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-blue" style="width: 10px; height: 10px;"></div>
+                    </div>
+                    <div class="bubble-value">-1 ~ 0</div>
+                </div>
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-red" style="width: 10px; height: 10px;"></div>
+                    </div>
+                    <div class="bubble-value">0 ~ 1</div>
+                </div>
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-red" style="width: 18px; height: 18px;"></div>
+                    </div>
+                    <div class="bubble-value">1 ~ 2</div>
+                </div>
+                <div class="bubble-item">
+                    <div class="bubble-icon-wrap">
+                        <div class="bubble-circle bc-red" style="width: 28px; height: 28px;"></div>
+                    </div>
+                    <div class="bubble-value">&gt;= 2</div>
+                </div>
+            </div>
+        </div>
+        <div class="info-badge" id="infoBadge">状态初始化...</div>
+    </div>
+
+    <div class="dashboard-container">
+
+        <div id="dashboardCurrent" class="show-in-current-block">
+            <div class="dashboard-card">
+                <div class="card-header-flex">
+                    <span class="card-title">🌟 关键指标概览</span>
+                </div>
+                <div class="kpi-row">
+                    <div class="kpi-card">
+                        <div class="kpi-title">全日进站总量</div>
+                        <div><span class="kpi-value" id="kpiTotalIn">0</span><span class="kpi-unit">万人次</span></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">全日出站总量</div>
+                        <div><span class="kpi-value" id="kpiTotalOut">0</span><span class="kpi-unit">万人次</span></div>
+                    </div>
+                    <div class="kpi-card">
+                        <div class="kpi-title">全日进出站总量</div>
+                        <div><span class="kpi-value" id="kpiTotalInOut">0</span><span class="kpi-unit">万人次</span></div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="card-header-flex">
+                    <span class="card-title">📈 各分组总量对比</span>
+                    <div class="local-controls">
+                        <select id="curGroupByTotal">
+                            <option value="区县" selected>按区县分组</option>
+                            <option value="环路">按环路分组</option>
+                            <option value="级别">按站点级别分组</option>
+                        </select>
+                        <select class="chart-theme-picker" data-target="curTotal">
+                            <option value="default">色系: 经典</option>
+                            <option value="no2">色系: No.2</option>
+                            <option value="no3">色系: No.3</option>
+                            <option value="no4">色系: No.4</option>
+                            <option value="no6">色系: No.6</option>
+                        </select>
+                        <div class="color-pickers"><input type="color" id="curTotalColor" value="#3b82f6"></div>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <div class="canvas-wrapper">
+                            <div class="chart-container" id="container-curTotal"><canvas id="curTotalChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="card-header-flex">
+                    <span class="card-title">⚖️ 各分组均值对比 (每车站)</span>
+                    <div class="local-controls">
+                        <select id="curGroupByAvg">
+                            <option value="区县">按区县分组</option>
+                            <option value="环路" selected>按环路分组</option>
+                            <option value="级别">按站点级别分组</option>
+                        </select>
+                        <select class="chart-theme-picker" data-target="curAvg">
+                            <option value="default">色系: 经典</option>
+                            <option value="no2">色系: No.2</option>
+                            <option value="no3">色系: No.3</option>
+                            <option value="no4">色系: No.4</option>
+                            <option value="no6">色系: No.6</option>
+                        </select>
+                        <div class="color-pickers"><input type="color" id="curAvgColor" value="#10b981"></div>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <div class="canvas-wrapper">
+                            <div class="chart-container" id="container-curAvg"><canvas id="curAvgChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 单站全日进出站客流趋势卡片（自动加载默认CSV） -->
+            <div class="dashboard-card">
+                <div class="card-header-flex" style="margin-bottom: 0;">
+                    <span class="card-title">🕒 单站全日进出站客流趋势</span>
+                </div>
+                <div id="hourlyUploadZone" class="upload-dropzone" onclick="document.getElementById('hourlyFileInput').click()">
+                    <p style="color: #3b82f6; font-weight: bold;">📂 点击或拖拽 CSV 文件上传（分时客流数据）</p>
+                    <input type="file" id="hourlyFileInput" accept=".csv" style="display: none;">
+                </div>
+                <div id="hourlyControls" style="display: none;">
+                    <div class="hourly-controls">
+                        <div class="hourly-control-group">
+                            <label>当前站点：</label>
+                            <select id="hourlyStationSelect"></select>
+                        </div>
+                        <div class="hourly-control-group">
+                            <label>图表类型：</label>
+                            <button id="hourlyTypeLine" class="toggle-btn active">折线图</button>
+                            <button id="hourlyTypeBar" class="toggle-btn">柱状图</button>
+                        </div>
+                        <div class="hourly-control-group">
+                            <label>进站色：</label>
+                            <input type="color" id="hourlyInColorPicker" value="#3b82f6">
+                        </div>
+                        <div class="hourly-control-group">
+                            <label>出站色：</label>
+                            <input type="color" id="hourlyOutColorPicker" value="#f97316">
+                        </div>
+                        <div id="hourlyStatsHint" class="stats-label" style="margin-left: auto;">等待数据加载...</div>
+                    </div>
+                    <div class="search-wrapper" style="margin-top: 8px;">
+                        <input type="text" id="hourlyStationSearch" class="station-search-input" placeholder="🔍 模糊搜索站点...">
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <div id="hourlyTrendChart" style="width:100%; height:520px;"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="dashboardCompare" class="show-in-compare" style="flex-direction: column; width: 100%;">
+            <div class="dashboard-card">
+                <div class="card-header-flex">
+                    <span class="card-title">📊 全网客流总量对比 (历年趋势)</span>
+                    <div class="local-controls">
+                        <select class="chart-theme-picker" data-target="total">
+                            <option value="default">色系: 经典</option>
+                            <option value="no2">色系: No.2</option>
+                            <option value="no3">色系: No.3</option>
+                            <option value="no4">色系: No.4</option>
+                            <option value="no6">色系: No.6</option>
+                        </select>
+                        <div class="color-pickers">
+                            <label style="display:flex; align-items:center; gap:5px;">进站 <input type="color"
+                                    id="colorInPicker" value="#3b82f6"></label>
+                            <label style="display:flex; align-items:center; gap:5px;">出站 <input type="color"
+                                    id="colorOutPicker" value="#10b981"></label>
+                            <label style="display:flex; align-items:center; gap:5px;">总量 <input type="color"
+                                    id="colorInOutPicker" value="#8b5cf6"></label>
+                        </div>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <h4>历年全日进站总量</h4>
+                        <div class="canvas-wrapper">
+                            <div class="chart-container" id="container-totalIn"><canvas id="totalInChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-box">
+                        <h4>历年全日出站总量</h4>
+                        <div class="canvas-wrapper">
+                            <div class="chart-container" id="container-totalOut"><canvas id="totalOutChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chart-box">
+                        <h4>历年全日进出站总量</h4>
+                        <div class="canvas-wrapper">
+                            <div class="chart-container" id="container-totalInOut"><canvas
+                                    id="totalInOutChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-card" id="cardDistrict">
+                <div class="card-header-flex">
+                    <span class="card-title">🏙️ 各区县客流对比</span>
+                    <div class="local-controls">
+                        <div class="multi-dropdown" id="distFilterDropdown"><button class="multi-btn">🏙️ 区域筛选
+                                ▾</button>
+                            <div class="multi-popup"></div>
+                        </div>
+                        <div class="multi-dropdown" id="distYearDropdown"><button class="multi-btn">📊 历年对比 ▾</button>
+                            <div class="multi-popup"></div>
+                        </div>
+                        <select class="chart-theme-picker" data-target="district">
+                            <option value="default">色系: 经典</option>
+                            <option value="no2">色系: No.2</option>
+                            <option value="no3">色系: No.3</option>
+                            <option value="no4">色系: No.4</option>
+                            <option value="no6">色系: No.6</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <div class="canvas-wrapper">
+                            <div class="chart-container" id="container-district"><canvas
+                                    id="districtCompareChart"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-card" id="cardRing">
+                <div class="card-header-flex">
+                    <span class="card-title">🔄 环路区域对比</span>
+                    <div class="local-controls">
+                        <div class="multi-dropdown" id="ringFilterDropdown"><button class="multi-btn">🔄 环路筛选 ▾</button>
+                            <div class="multi-popup"></div>
+                        </div>
+                        <div class="multi-dropdown" id="ringYearDropdown"><button class="multi-btn">📊 历年对比 ▾</button>
+                            <div class="multi-popup"></div>
+                        </div>
+                        <select class="chart-theme-picker" data-target="ring">
+                            <option value="default">色系: 经典</option>
+                            <option value="no2">色系: No.2</option>
+                            <option value="no3">色系: No.3</option>
+                            <option value="no4">色系: No.4</option>
+                            <option value="no6">色系: No.6</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <div class="canvas-wrapper">
+                            <div class="chart-container" id="container-ring"><canvas id="ringCompareChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="dashboard-card">
+                <div class="card-header-flex" style="margin-bottom: 0;">
+                    <span class="card-title">📍 单个车站历年变化</span>
+                    <div class="local-controls" style="flex-wrap: wrap; gap: 12px;">
+                        <div class="search-wrapper">
+                            <label>选择车站：</label>
+                            <select id="singleStationSelect"></select>
+                        </div>
+                        <div class="search-wrapper">
+                            <input type="text" id="singleStationSearch" class="station-search-input" placeholder="🔍 模糊搜索站点...">
+                        </div>
+                        <select class="chart-theme-picker" data-target="stationTrend">
+                            <option value="default">色系: 经典</option>
+                            <option value="no2">色系: No.2</option>
+                            <option value="no3">色系: No.3</option>
+                            <option value="no4">色系: No.4</option>
+                            <option value="no6">色系: No.6</option>
+                        </select>
+                        <div class="color-pickers"><input type="color" id="stationTrendColor" value="#3b82f6"></div>
+                    </div>
+                </div>
+                <div class="chart-row">
+                    <div class="chart-box">
+                        <div class="canvas-wrapper" style="overflow: hidden;">
+                            <div class="chart-container" style="width: 100%;"><canvas id="stationTrendChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // ==================== 原有地图、客流指标等核心逻辑 ====================
+        let map, stationsLayer, subwayLinesLayer;
+        let stationsGeoJson = null;
+        let basePropsMap = new Map();
+        let yearDataCache = new Map();
+
+        let appMode = 'current';
+        let currentYear = '2026';
+        let currentYearA = '2025', currentYearB = '2026';
+        let currentMetric = '全日进站量';
+        let diffMin = -1000, diffMax = 1000;
+        let valMaxCurrent = 10;
+        let circleSizeFactor = 1.0, currentOpacity = 0.85;
+        let currentBubbleColor = '#3b82f6';
+        let minFlowThreshold = 0;
+
+        let activeFilters = { '级别': new Set(), '区县': new Set(), '分区': new Set(), '环路': new Set() };
+        let filterCategories = { '级别': [], '区县': [], '分区': [], '环路': [] };
+        let currentPopup = null;
+
+        let isDrawing = false;
+        let drawPoints = [];
+        let drawLayer = null;
+        let customPolygons = [];
+        let drawnPolygonsGroup;
+        let localFilesMap = new Map();
+
+        let totalInChart, totalOutChart, totalInOutChart, districtChart, ringChart, stationTrendChart;
+        let curTotalChart, curAvgChart;
+        let currentSortMode = 'growth';
+        let trendYears = ['2019', '2023', '2024', '2025', '2026'];
+
+        const subwayLineColors = {
+            "1号线": "#A4343A", "八通线": "#A4343A",
+            "2号线": "#004B87",
+            "4号线": "#008C95", "大兴线": "#008C95",
+            "5号线": "#AA0061",
+            "6号线": "#B1783E",
+            "7号线": "#FFC56E",
+            "8号线": "#009B6B",
+            "9号线": "#97D700",
+            "10号线": "#0092BC",
+            "11号线": "#ED7967",
+            "13号线": "#F9E300",
+            "14号线": "#CA9AAD",
+            "15号线": "#652D90",
+            "16号线": "#6B8E23",
+            "17号线": "#00A9A7",
+            "19号线": "#D5A3A3",
+            "亦庄线": "#D0006F",
+            "房山线": "#F47321",
+            "燕房线": "#D86018",
+            "昌平线": "#D986BA",
+            "首都机场线": "#A192B2",
+            "大兴机场线": "#004A99",
+            "S1线": "#A45A2A",
+            "西郊线": "#E2B2D1"
+        };
+
+        function getLineColor(lineName) {
+            if (!lineName) return "#aaaaaa";
+            for (let [key, color] of Object.entries(subwayLineColors)) {
+                if (lineName.includes(key) || key.includes(lineName)) return color;
+            }
+            return "#aaaaaa";
+        }
+
+        const CHART_THEMES = {
+            'default': ['#3b82f6', '#10b981', '#8b5cf6', '#f59e0b'],
+            'no2': ['#6a2c70', '#b83b5e', '#f08a5d', '#f9ed69'],
+            'no3': ['#95e1d3', '#f38181', '#fce38a', '#eaffd0'],
+            'no4': ['#08d9d6', '#ff2e63', '#252a34', '#eaeaea'],
+            'no6': ['#a8d8ea', '#aa96da', '#fcbad3', '#ffffd2']
+        };
+
+        let globalYearColors = { '2019': '#64748b', '2023': '#8b5cf6', '2024': '#94a3b8', '2025': '#f59e0b', '2026': '#3b82f6', '2027': '#10b981', '2028': '#f43f5e' };
+        let distChartState = { selectedYears: ['2025', '2026'], selectedItems: [] };
+        let ringChartState = { selectedYears: ['2025', '2026'], selectedItems: [] };
+        const districtOrder = ["东城区", "西城区", "朝阳区", "海淀区", "丰台区", "石景山区", "门头沟区", "房山区", "通州区", "顺义区", "昌平区", "大兴区", "怀柔区", "平谷区", "密云区", "延庆区"];
+        const ringOrderMaster = ["二环以内", "二环内", "二至三环", "二环至三环", "二环-三环", "三至四环", "三环至四环", "三环-四环", "四至五环", "四环至五环", "四环-五环", "五至六环", "五环至六环", "五环-六环", "六环以外", "六环外"];
+
+        function parseNumber(val) {
+            if (val === undefined || val === null) return null;
+            if (typeof val === 'string') { val = val.replace(/,/g, '').replace(/\s+/g, ''); if (val === '' || val === '#N/A' || val === '#DIV/0!' || val === '—') return null; }
+            let num = parseFloat(val); return isNaN(num) ? null : num;
+        }
+
+        async function fetchCsvText(url) {
+            if (localFilesMap.has(url)) {
+                let file = localFilesMap.get(url);
+                let buffer = await file.arrayBuffer();
+                let decoder = new TextDecoder('utf-8', { fatal: true });
+                try { return decoder.decode(buffer); } catch (e) { decoder = new TextDecoder('gbk'); return decoder.decode(buffer); }
+            }
+            const resp = await fetch(url);
+            if (!resp.ok) throw new Error('Not found');
+            const buffer = await resp.arrayBuffer();
+            let decoder = new TextDecoder('utf-8', { fatal: true });
+            try { return decoder.decode(buffer); } catch (e) { decoder = new TextDecoder('gbk'); return decoder.decode(buffer); }
+        }
+
+        async function fetchJsonData(url) {
+            if (localFilesMap.has(url)) return JSON.parse(await localFilesMap.get(url).text());
+            const resp = await fetch(url); if (!resp.ok) throw new Error('Not found'); return await resp.json();
+        }
+
+        function sanitizeString(str) {
+            if (!str) return '';
+            return str.replace(/^[\uFEFF\s]+|[\s]+$/g, '').replace(/\s+/g, '');
+        }
+
+        async function loadBaseProperties() {
+            if (basePropsMap.size > 0) return;
+            try {
+                const text = await fetchCsvText('data/423站点基础属性信息.csv');
+                const result = Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => sanitizeString(h) });
+                for (let row of result.data) {
+                    let name = row['stations'] || row['站点'] || row['站名'] || row['车站'];
+                    if (!name) continue; name = sanitizeString(name);
+                    basePropsMap.set(name, { '级别': sanitizeString(row['级别']), '区县': sanitizeString(row['区县']), '分区': sanitizeString(row['分区']), '环路': sanitizeString(row['环路']) });
+                }
+            } catch (e) { }
+        }
+
+        async function loadYearData(year) {
+            if (yearDataCache.has(year)) return yearDataCache.get(year);
+            let propsMap = new Map(); for (let [name, base] of basePropsMap.entries()) propsMap.set(name, { ...base });
+            try {
+                const text = await fetchCsvText(`data/${year}年客流开发数据.csv`);
+                const res = Papa.parse(text, { header: true, skipEmptyLines: true, transformHeader: h => sanitizeString(h) });
+                for (let row of res.data) {
+                    let sn = row['stations'] || row['站点'] || row['站名'] || row['车站']; if (!sn) continue; sn = sanitizeString(sn);
+                    let p = propsMap.get(sn) || {};
+                    let in_val = parseNumber(row['全日进站量']); let out_val = parseNumber(row['全日出站量']); let inout_val = parseNumber(row['全日进出站量']);
+                    if (year === '2019') { if (in_val !== null && out_val === null && inout_val === null) { inout_val = in_val; in_val = null; } }
+                    else { if (inout_val === null && (in_val !== null || out_val !== null)) { inout_val = (in_val || 0) + (out_val || 0); } }
+                    p['全日进站量'] = in_val; p['全日出站量'] = out_val; p['全日进出站量'] = inout_val;
+                    propsMap.set(sn, p);
+                }
+            } catch (e) { }
+
+            try {
+                let hourlyFileName = `${year}年分时客流数据.csv`;
+                const hourlyFileCandidates = [
+                    hourlyFileName,
+                    `${year}年分时客流数据.csv`,
+                    `${year}年单日进出站客流量.csv`,
+                    `${year}年站点单日进出客流量.csv`,
+                    'data/420车站_站点单日进出客流量_20260311.csv',
+                    'data/420车站_站点单日进出客流量.csv'
+                ];
+                for (let key of localFilesMap.keys()) {
+                    if (key.includes('分时') || key.includes('单日') || key.includes('进出站量')) {
+                        hourlyFileName = key;
+                        break;
+                    }
+                }
+
+                let text3 = null;
+                if (localFilesMap.has(hourlyFileName)) {
+                    text3 = await fetchCsvText(hourlyFileName);
+                } else {
+                    for (const candidate of hourlyFileCandidates) {
+                        try {
+                            text3 = await fetchCsvText(candidate);
+                            hourlyFileName = candidate;
+                            break;
+                        } catch (e) { }
+                    }
+                }
+                if (!text3) throw new Error('hourly file not found');
+                const complexHourlyData = parseComplexHourlyCsvV2(text3) || parseComplexHourlyCsv(text3);
+
+                if (complexHourlyData) {
+                    const firstStation = complexHourlyData.cache.get(complexHourlyData.stations[0]);
+                    propsMap.set('_TIME_LABELS_', firstStation?.times || []);
+                    propsMap.set('_HAS_OUT_DATA_', true);
+
+                    complexHourlyData.cache.forEach((value, stationName) => {
+                        const p = propsMap.get(stationName) || {};
+                        p.times = value.times;
+                        p.inVals = value.inVals;
+                        p.outVals = value.outVals;
+                        p['分时进站'] = value.inVals;
+                        p['分时出站'] = value.outVals;
+                        propsMap.set(stationName, p);
+                    });
+                } else {
+                    const res3 = Papa.parse(text3, { header: true, skipEmptyLines: true, transformHeader: h => sanitizeString(h) });
+                    let rawHeaders = Object.keys(res3.data[0] || {});
+
+                    let inCols = []; let outCols = []; let pureTimeCols = [];
+                    let excludeKeys = ['全日进站量', '全日出站量', '全日进出站量', '早高峰进站量', '早高峰出站量', '早高峰进出站量', '车站', '站点', '站名', 'stations'];
+
+                    rawHeaders.forEach(cleanH => {
+                        if (!excludeKeys.includes(cleanH) && cleanH !== '') {
+                            if (cleanH.includes('进站')) inCols.push(cleanH);
+                            else if (cleanH.includes('出站')) outCols.push(cleanH);
+                            else if (/(\d{1,2})[:：](\d{2})/.test(cleanH)) pureTimeCols.push(cleanH);
+                        }
+                    });
+
+                    if (inCols.length === 0 && pureTimeCols.length > 0) inCols = pureTimeCols;
+
+                    let extractTime = (colName) => colName.replace('进站', '').replace('出站', '');
+                    let timeLabels = inCols.map(extractTime);
+
+                    let sortedIndices = timeLabels.map((val, ind) => {
+                        let match = val.match(/(\d{1,2})[:：](\d{2})/);
+                        let timeVal = 0;
+                        if (match) {
+                            let h = parseInt(match[1]), m = parseInt(match[2]);
+                            if (h < 4) h += 24;
+                            timeVal = h * 60 + m;
+                        }
+                        return { ind, timeVal };
+                    }).sort((a, b) => a.timeVal - b.timeVal).map(obj => obj.ind);
+
+                    inCols = sortedIndices.map(i => inCols[i]);
+                    if (outCols.length > 0) outCols = sortedIndices.map(i => outCols[i]);
+                    timeLabels = sortedIndices.map(i => timeLabels[i]);
+
+                    propsMap.set('_TIME_LABELS_', timeLabels);
+                    propsMap.set('_HAS_OUT_DATA_', outCols.length > 0);
+
+                    for (let row of res3.data) {
+                        let sn = row['stations'] || row['站点'] || row['站名'] || row['站点名称'] || row['车站'];
+                        if (!sn) continue; sn = sanitizeString(sn);
+                        let p = propsMap.get(sn) || {};
+
+                        let inArr = [], outArr = [];
+                        for (let i = 0; i < timeLabels.length; i++) {
+                            inArr.push(parseNumber(row[inCols[i]]) || 0);
+                            if (outCols.length > 0 && outCols[i]) outArr.push(parseNumber(row[outCols[i]]) || 0);
+                            else outArr.push(0);
+                        }
+                        p['分时进站'] = inArr; p['分时出站'] = outArr;
+                        propsMap.set(sn, p);
+                    }
+                }
+            } catch (e) { }
+
+            let stationsJson = null;
+            try {
+                if (year === '2026') stationsJson = await fetchJsonData('data/现状423座车站.json');
+                else if (year === '2025') stationsJson = await fetchJsonData('data/414座车站.json');
+                else stationsJson = await fetchJsonData('data/车站398.json');
+            } catch (e) { }
+            yearDataCache.set(year, { propsMap, stationsJson }); return yearDataCache.get(year);
+        }
+
+        async function loadStationsGeoJson() { if (stationsGeoJson) return; const data2026 = await loadYearData('2026'); stationsGeoJson = data2026.stationsJson; if (stationsGeoJson) for (let f of stationsGeoJson.features) { if (f.properties.站名 && !f.properties.站点) f.properties.站点 = f.properties.站名; } }
+
+        async function loadLines() {
+            try {
+                const linesGeoJson = await fetchJsonData('data/2025年底-线路909km-现状.json');
+                if (subwayLinesLayer) map.removeLayer(subwayLinesLayer);
+                subwayLinesLayer = L.geoJSON(linesGeoJson, {
+                    style: function (feature) {
+                        let lineName = feature.properties?.name || feature.properties?.线路名称 || feature.properties?.line || feature.properties?.LINE_NAME || feature.properties?.Layer || "";
+                        let color = getLineColor(lineName);
+                        return { color: color, weight: 3, opacity: 0.85, smoothFactor: 1 };
+                    },
+                    onEachFeature: function (feature, layer) {
+                        let lineName = feature.properties?.name || feature.properties?.线路名称 || feature.properties?.line || feature.properties?.Layer || "未知线路";
+                        layer.bindTooltip(lineName, { sticky: true });
+                    }
+                }).addTo(map);
+            } catch (e) { console.error("加载线路数据失败:", e); }
+        }
+
+        function getFilteredFeatures() {
+            if (!stationsGeoJson) return [];
+            let features = stationsGeoJson.features;
+            if (customPolygons && customPolygons.length > 0) {
+                features = features.filter(f => { try { return customPolygons.some(poly => turf.booleanPointInPolygon(f, poly)); } catch (e) { return false; } });
+            }
+            let hasActive = false; for (let k in activeFilters) if (activeFilters[k].size > 0) { hasActive = true; break; }
+            if (!hasActive) return features;
+            return features.filter(f => {
+                let name = f.properties?.站点 || f.properties?.站名; let props = basePropsMap.get(name); if (!props) return false;
+                for (let [group, set] of Object.entries(activeFilters)) {
+                    if (set.size === 0) continue; let val = props[group]; if (!val || !set.has(val)) return false;
+                } return true;
+            });
+        }
+
+        async function renderMap() {
+            if (!stationsGeoJson) await loadStationsGeoJson();
+            const baseFeatures = getFilteredFeatures();
+            document.getElementById('metricLegendName').innerText = `${currentMetric} 差值`;
+            document.getElementById('metricLegendNameCur').innerText = `${currentMetric}`;
+            const dataCur = await loadYearData(currentYear);
+            const dataA = await loadYearData(currentYearA);
+            const dataB = await loadYearData(currentYearB);
+            const propsCur = dataCur.propsMap;
+            const propsA = dataA.propsMap;
+            const propsB = dataB.propsMap;
+
+            let maxVal = 0;
+            for (let f of baseFeatures) {
+                let name = f.properties?.站点 || f.properties?.站名;
+                let val = appMode === 'current' ? propsCur.get(name)?.[currentMetric] : propsA.get(name)?.[currentMetric];
+                if (val !== null && val !== undefined && !isNaN(val)) { let v_wan = val / 10000; if (v_wan > maxVal) maxVal = v_wan; }
+            }
+            let slider = document.getElementById('minFlowSlider');
+            let newMax = Math.ceil(maxVal);
+            if (newMax < 1) newMax = 1;
+            if (parseInt(slider.max) !== newMax) {
+                slider.max = newMax;
+                if (minFlowThreshold > newMax) { minFlowThreshold = newMax; slider.value = newMax; document.getElementById('minFlowInput').value = newMax; }
+            }
+            const finalFeatures = baseFeatures.filter(f => {
+                if (minFlowThreshold <= 0) return true;
+                let name = f.properties?.站点 || f.properties?.站名;
+                let val = appMode === 'current' ? propsCur.get(name)?.[currentMetric] : propsA.get(name)?.[currentMetric];
+                if (val === null || val === undefined || isNaN(val)) return false;
+                return (val / 10000) >= minFlowThreshold;
+            });
+
+            if (appMode === 'current') {
+                let vals = []; for (let f of finalFeatures) { let name = f.properties?.站点 || f.properties?.站名; let v = propsCur.get(name)?.[currentMetric]; if (v !== null && !isNaN(v)) vals.push(v / 10000); }
+                valMaxCurrent = vals.length ? Math.max(...vals) : 10; if (valMaxCurrent < 1) valMaxCurrent = 1;
+                if (stationsLayer) map.removeLayer(stationsLayer);
+                stationsLayer = L.geoJSON({ type: "FeatureCollection", features: finalFeatures }, {
+                    pointToLayer: (f, ll) => {
+                        let name = f.properties?.站点 || f.properties?.站名; let v = propsCur.get(name)?.[currentMetric];
+                        let v_wan = (v !== null) ? v / 10000 : null;
+                        let rBase = 4; if (v_wan !== null && !isNaN(v_wan)) { rBase = 4 + (v_wan / valMaxCurrent) * 14; }
+                        let r = rBase * circleSizeFactor;
+                        let color = (v_wan !== null) ? currentBubbleColor : `rgba(156, 163, 175, ${currentOpacity})`;
+                        return L.circleMarker(ll, { radius: Math.max(3, r), fillColor: color, color: "#fff", weight: 1, fillOpacity: currentOpacity });
+                    },
+                    onEachFeature: (f, l) => {
+                        let name = f.properties?.站点 || f.properties?.站名; let v = propsCur.get(name)?.[currentMetric];
+                        let v_str = v !== null ? v.toFixed(0) : '无数据';
+                        l.bindPopup(`<b>${name}</b><br>${currentYear} ${currentMetric}: <br><span style="color:#3b82f6; font-weight:bold; font-size:14px;">${v_str}</span>`);
+                    }
+                }).addTo(map);
+                updateTop10Current(finalFeatures, propsCur);
+                updateDashboardCurrent(finalFeatures, propsCur);
+                document.getElementById('bubbleLegendTitle').innerText = '客流规模 (现状)';
+                document.getElementById('infoBadge').innerText = `${currentYear}年 | 单年绝对值`;
+            } else {
+                let diffs = [];
+                for (let f of finalFeatures) {
+                    let name = f.properties?.站点 || f.properties?.站名;
+                    let valA = propsA.get(name)?.[currentMetric]; let valB = propsB.get(name)?.[currentMetric];
+                    if (valA !== null && valB !== null && !isNaN(valA) && !isNaN(valB)) diffs.push((valA - valB) / 10000);
+                }
+                let absMax = 2;
+                if (diffs.length) { diffMin = Math.min(...diffs); diffMax = Math.max(...diffs); absMax = Math.max(Math.abs(diffMin), Math.abs(diffMax)); if (diffMin === diffMax) { diffMin -= 1; diffMax += 1; } }
+                else { diffMin = -2; diffMax = 2; }
+                if (stationsLayer) map.removeLayer(stationsLayer);
+                stationsLayer = L.geoJSON({ type: "FeatureCollection", features: finalFeatures }, {
+                    pointToLayer: (f, ll) => {
+                        let name = f.properties?.站点 || f.properties?.站名; let valA = propsA.get(name)?.[currentMetric]; let valB = propsB.get(name)?.[currentMetric];
+                        let diff_wan = (valA !== null && valB !== null) ? (valA - valB) / 10000 : null;
+                        let rBase = 4; if (diff_wan !== null && !isNaN(diff_wan)) { let absDiff = Math.abs(diff_wan); rBase = absDiff >= 2 ? 14 : (5 + (absDiff / 2) * 9); }
+                        let r = rBase * circleSizeFactor;
+                        let color = `rgba(156, 163, 175, ${currentOpacity})`;
+                        if (diff_wan !== null) { if (diff_wan > 0) { color = `rgba(239, 68, 68, ${currentOpacity})`; } else if (diff_wan < 0) { color = `rgba(59, 130, 246, ${currentOpacity})`; } }
+                        return L.circleMarker(ll, { radius: Math.max(3, r), fillColor: color, color: "#fff", weight: 0.8, fillOpacity: currentOpacity });
+                    },
+                    onEachFeature: (f, l) => {
+                        let name = f.properties?.站点 || f.properties?.站名; let valA = propsA.get(name)?.[currentMetric]; let valB = propsB.get(name)?.[currentMetric];
+                        let diff_raw = (valA !== null && valB !== null) ? (valA - valB) : null;
+                        let diff_str = diff_raw !== null ? (diff_raw > 0 ? '+' + diff_raw : diff_raw) : '无数据';
+                        l.bindPopup(`<b>${name}</b><br>${currentYearA} ${currentMetric}: ${valA?.toFixed(0) || '—'}<br>${currentYearB} ${currentMetric}: ${valB?.toFixed(0) || '—'}<br><span style="color:${diff_raw > 0 ? '#ef4444' : (diff_raw < 0 ? '#3b82f6' : '#64748b')}">差值: ${diff_str}</span>`);
+                    }
+                }).addTo(map);
+                updateTop10Compare(finalFeatures, propsA, propsB);
+                updateDashboardCompare(finalFeatures);
+                document.getElementById('bubbleLegendTitle').innerText = '进出站客流变量';
+                document.getElementById('infoBadge').innerText = `${currentYearA} vs ${currentYearB} | 差值 = ${currentYearA}值 - ${currentYearB}值`;
+            }
+            if (subwayLinesLayer) subwayLinesLayer.bringToBack();
+        }
+
+        function updateTop10Current(features, propsCur) {
+            document.getElementById('top10Title').innerText = '📊 站点客流 TOP10';
+            let items = [];
+            for (let f of features) {
+                let name = f.properties?.站点 || f.properties?.站名; let v = propsCur.get(name)?.[currentMetric];
+                if (v !== null && !isNaN(v)) items.push({ name, val: v });
+            }
+            items.sort((a, b) => b.val - a.val);
+            let html = `<ul class="rank-list">` + items.slice(0, 10).map((item, idx) => {
+                return `<li style="border-left: 3px solid #3b82f6"><span class="rank-number" style="color: #3b82f6">${idx + 1}</span><span class="rank-name">${item.name}</span><span class="rank-value" style="color: #3b82f6; background: #eef2ff">${item.val.toFixed(0)}</span></li>`;
+            }).join('') + `</ul>`;
+            document.getElementById('top10List').innerHTML = html;
+        }
+
+        function updateTop10Compare(features, propsA, propsB) {
+            document.getElementById('top10Title').innerText = '📊 站点客流变化 TOP10';
+            let items = [];
+            for (let f of features) {
+                let name = f.properties?.站点 || f.properties?.站名;
+                let va = propsA.get(name)?.[currentMetric]; let vb = propsB.get(name)?.[currentMetric];
+                if (va !== null && vb !== null && !isNaN(va) && !isNaN(vb)) {
+                    let diff = va - vb;
+                    if (currentSortMode === 'growth' && diff > 0) items.push({ name, diff });
+                    if (currentSortMode === 'decline' && diff < 0) items.push({ name, diff });
+                }
+            }
+            if (currentSortMode === 'growth') items.sort((a, b) => b.diff - a.diff); else items.sort((a, b) => a.diff - b.diff);
+            let html = '';
+            if (items.length === 0) { html = `<div style="text-align:center; padding:20px 10px; color:#94a3b8; font-size:12px;">该区域内暂无${currentSortMode === 'growth' ? '客流增长' : '客流缩减'}的站点</div>`; }
+            else {
+                html = `<ul class="rank-list">` + items.slice(0, 10).map((item, idx) => {
+                    let diffStr = item.diff > 0 ? `+${item.diff.toFixed(0)}` : item.diff.toFixed(0);
+                    let color = item.diff > 0 ? '#ef4444' : (item.diff < 0 ? '#3b82f6' : '#64748b');
+                    let bg = item.diff > 0 ? '#fef2f2' : (item.diff < 0 ? '#eff6ff' : '#f1f5f9');
+                    return `<li style="border-left: 3px solid ${color}"><span class="rank-number" style="color: ${color}">${idx + 1}</span><span class="rank-name">${item.name}</span><span class="rank-value" style="color: ${color}; background: ${bg}">${diffStr}</span></li>`;
+                }).join('') + `</ul>`;
+            }
+            document.getElementById('top10List').innerHTML = html;
+        }
+
+        function updateChartContainerWidth(containerId, labelCount, datasetCount) {
+            const container = document.getElementById(containerId);
+            if (!container) return;
+            let categoryWidth = datasetCount * 24 + (datasetCount - 1) * 4 + 36;
+            if (categoryWidth < 60) categoryWidth = 60;
+            let calcWidth = 80 + labelCount * categoryWidth;
+            if (calcWidth < 200) calcWidth = 200;
+            container.style.width = calcWidth + 'px';
+        }
+
+        function updateDashboardCurrent(features, propsCur) {
+            let sumIn = 0, sumOut = 0, sumInOut = 0;
+            for (let f of features) {
+                let name = f.properties?.站点 || f.properties?.站名;
+                let vIn = propsCur.get(name)?.['全日进站量']; let vOut = propsCur.get(name)?.['全日出站量']; let vInOut = propsCur.get(name)?.['全日进出站量'];
+                if (vIn !== null && !isNaN(vIn)) sumIn += vIn; if (vOut !== null && !isNaN(vOut)) sumOut += vOut; if (vInOut !== null && !isNaN(vInOut)) sumInOut += vInOut;
+            }
+            document.getElementById('kpiTotalIn').innerText = (sumIn / 10000).toFixed(2);
+            document.getElementById('kpiTotalOut').innerText = (sumOut / 10000).toFixed(2);
+            document.getElementById('kpiTotalInOut').innerText = (sumInOut / 10000).toFixed(2);
+
+            const gKeyTotal = document.getElementById('curGroupByTotal').value;
+            const gKeyAvg = document.getElementById('curGroupByAvg').value;
+            const calcGroup = (key) => {
+                let mapSum = new Map(), mapCount = new Map();
+                for (let f of features) {
+                    let name = f.properties?.站点 || f.properties?.站名;
+                    let props = basePropsMap.get(name); let v = propsCur.get(name)?.[currentMetric];
+                    if (props && v !== null && !isNaN(v)) {
+                        let groupVal = props[key];
+                        if (groupVal) { mapSum.set(groupVal, (mapSum.get(groupVal) || 0) + v); mapCount.set(groupVal, (mapCount.get(groupVal) || 0) + 1); }
+                    }
+                }
+                return { sum: mapSum, count: mapCount };
+            }
+            let cTotalColor = document.getElementById('curTotalColor').value;
+            let resTotal = calcGroup(gKeyTotal);
+            let labelsTotal = Array.from(resTotal.sum.keys());
+            if (gKeyTotal === '区县') labelsTotal.sort((a, b) => districtOrder.indexOf(a) - districtOrder.indexOf(b));
+            else if (gKeyTotal === '环路') labelsTotal.sort((a, b) => { let iA = ringOrderMaster.indexOf(a), iB = ringOrderMaster.indexOf(b); return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB); });
+            else labelsTotal.sort();
+            let dataTotal = labelsTotal.map(k => resTotal.sum.get(k) / 10000);
+            updateChartContainerWidth('container-curTotal', labelsTotal.length, 1);
+            if (curTotalChart) curTotalChart.destroy();
+            curTotalChart = new Chart(document.getElementById('curTotalChart'), {
+                type: 'bar', data: { labels: labelsTotal, datasets: [{ label: `${currentYear} ${currentMetric} (万)`, data: dataTotal, backgroundColor: cTotalColor, barThickness: 24 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } }
+            });
+            let cAvgColor = document.getElementById('curAvgColor').value;
+            let resAvg = calcGroup(gKeyAvg);
+            let labelsAvg = Array.from(resAvg.sum.keys());
+            if (gKeyAvg === '区县') labelsAvg.sort((a, b) => districtOrder.indexOf(a) - districtOrder.indexOf(b));
+            else if (gKeyAvg === '环路') labelsAvg.sort((a, b) => { let iA = ringOrderMaster.indexOf(a), iB = ringOrderMaster.indexOf(b); return (iA === -1 ? 999 : iA) - (iB === -1 ? 999 : iB); });
+            else labelsAvg.sort();
+            let dataAvg = labelsAvg.map(k => (resAvg.sum.get(k) / resAvg.count.get(k)) / 10000);
+            updateChartContainerWidth('container-curAvg', labelsAvg.length, 1);
+            if (curAvgChart) curAvgChart.destroy();
+            curAvgChart = new Chart(document.getElementById('curAvgChart'), {
+                type: 'bar', data: { labels: labelsAvg, datasets: [{ label: `单站日均 ${currentMetric} (万)`, data: dataAvg, backgroundColor: cAvgColor, barThickness: 24 }] },
+                options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true } } }
+            });
+        }
+
+        async function updateDashboardCompare(features) {
+            let inTotals = new Array(trendYears.length).fill(0); let outTotals = new Array(trendYears.length).fill(0); let inOutTotals = new Array(trendYears.length).fill(0);
+            let barColors = [];
+            for (let i = 0; i < trendYears.length; i++) {
+                let yr = trendYears[i];
+                let yrData = await loadYearData(yr);
+                barColors.push(globalYearColors[yr] || '#3b82f6');
+                let sumIn = 0, sumOut = 0, sumInOut = 0;
+                for (let f of features) {
+                    let name = f.properties?.站点 || f.properties?.站名;
+                    let vIn = yrData.propsMap.get(name)?.['全日进站量']; let vOut = yrData.propsMap.get(name)?.['全日出站量']; let vInOut = yrData.propsMap.get(name)?.['全日进出站量'];
+                    if (vIn !== null && !isNaN(vIn)) sumIn += vIn; if (vOut !== null && !isNaN(vOut)) sumOut += vOut; if (vInOut !== null && !isNaN(vInOut)) sumInOut += vInOut;
+                }
+                inTotals[i] = sumIn; outTotals[i] = sumOut; inOutTotals[i] = sumInOut;
+            }
+            let maxIn = Math.max(...inTotals); let maxOut = Math.max(...outTotals); let maxInOut = Math.max(...inOutTotals);
+            updateChartContainerWidth('container-totalIn', trendYears.length, 1); updateChartContainerWidth('container-totalOut', trendYears.length, 1); updateChartContainerWidth('container-totalInOut', trendYears.length, 1);
+            if (totalInChart) totalInChart.destroy();
+            totalInChart = new Chart(document.getElementById('totalInChart'), { type: 'bar', data: { labels: trendYears, datasets: [{ label: '全日进站总量', data: inTotals, backgroundColor: barColors, barThickness: 24 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, suggestedMax: maxIn * 1.1 } }, plugins: { legend: { display: false } } } });
+            if (totalOutChart) totalOutChart.destroy();
+            totalOutChart = new Chart(document.getElementById('totalOutChart'), { type: 'bar', data: { labels: trendYears, datasets: [{ label: '全日出站总量', data: outTotals, backgroundColor: barColors, barThickness: 24 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, suggestedMax: maxOut * 1.1 } }, plugins: { legend: { display: false } } } });
+            if (totalInOutChart) totalInOutChart.destroy();
+            totalInOutChart = new Chart(document.getElementById('totalInOutChart'), { type: 'bar', data: { labels: trendYears, datasets: [{ label: '全日进出站总量', data: inOutTotals, backgroundColor: barColors, barThickness: 24 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, suggestedMax: maxInOut * 1.1 } }, plugins: { legend: { display: false } } } });
+            await updateDistrictChartCompare(features);
+            await updateRingChartCompare(features);
+            // 更新单个车站历年变化的下拉菜单
+            let stationSelect = document.getElementById('singleStationSelect');
+            let validStations = features.map(f => f.properties?.站点 || f.properties?.站名).sort();
+            allStationTrendNames = validStations;  // 存储用于搜索
+            stationSelect.innerHTML = '<option value="">-- 请选择车站 --</option>' + validStations.map(s => `<option value="${s}">${s}</option>`).join('');
+            let selectedStation = stationSelect.value; if (selectedStation) { updateStationChart(selectedStation); }
+            // 绑定搜索框事件（如果尚未绑定）
+            const searchInput = document.getElementById('singleStationSearch');
+            if (searchInput && !searchInput.hasListener) {
+                searchInput.hasListener = true;
+                searchInput.addEventListener('input', (e) => filterStationTrendList(e.target.value));
+            }
+        }
+
+        // 历史对比页的站点列表（用于搜索）
+        let allStationTrendNames = [];
+
+        function filterStationTrendList(filterText) {
+            const select = document.getElementById('singleStationSelect');
+            const currentVal = select.value;
+            let filtered = allStationTrendNames;
+            if (filterText.trim() !== '') {
+                const lower = filterText.toLowerCase();
+                filtered = allStationTrendNames.filter(name => name.toLowerCase().includes(lower));
+            }
+            select.innerHTML = '<option value="">-- 请选择车站 --</option>' + filtered.map(s => `<option value="${s}">${s}</option>`).join('');
+            if (filtered.length > 0 && filtered.includes(currentVal)) {
+                select.value = currentVal;
+            } else if (filtered.length > 0) {
+                select.value = filtered[0];
+            }
+            if (select.value) {
+                updateStationChart(select.value);
+            } else {
+                if (stationTrendChart) stationTrendChart.destroy();
+            }
+        }
+
+        async function updateDistrictChartCompare(features) {
+            let allDistricts = [...new Set([...basePropsMap.values()].map(p => p['区县']).filter(d => d && d !== ''))].sort((a, b) => districtOrder.indexOf(a) - districtOrder.indexOf(b));
+            let displayDistricts = allDistricts.filter(d => distChartState.selectedItems.includes(d));
+            let sortedYears = [...distChartState.selectedYears].sort((a, b) => parseInt(a) - parseInt(b));
+            let globalMaxY = 10;
+            for (let yr of trendYears) {
+                let yrData = await loadYearData(yr);
+                for (let d of allDistricts) {
+                    let sum = 0;
+                    for (let f of features) {
+                        let name = f.properties?.站点 || f.properties?.站名; let props = basePropsMap.get(name);
+                        if (props && props['区县'] === d) { let v = yrData.propsMap.get(name)?.[currentMetric]; if (v !== null && !isNaN(v)) sum += v; }
+                    }
+                    if (sum > globalMaxY) globalMaxY = sum;
+                }
+            }
+            updateChartContainerWidth('container-district', displayDistricts.length, sortedYears.length);
+            let datasets = [];
+            for (let i = 0; i < sortedYears.length; i++) {
+                let yr = sortedYears[i]; let yrData = await loadYearData(yr); let values = [];
+                for (let d of displayDistricts) {
+                    let sum = 0;
+                    for (let f of features) {
+                        let name = f.properties?.站点 || f.properties?.站名; let props = basePropsMap.get(name);
+                        if (props && props['区县'] === d) { let v = yrData.propsMap.get(name)?.[currentMetric]; if (v !== null && !isNaN(v)) sum += v; }
+                    }
+                    values.push(sum);
+                }
+                datasets.push({ label: `${yr}年 ${currentMetric}`, data: values, backgroundColor: globalYearColors[yr] || '#3b82f6', barThickness: 24 });
+            }
+            if (districtChart) districtChart.destroy();
+            districtChart = new Chart(document.getElementById('districtCompareChart'), { type: 'bar', data: { labels: displayDistricts, datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, suggestedMax: globalMaxY * 1.1 } }, plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(0)}` } } } } });
+        }
+
+        async function updateRingChartCompare(features) {
+            let ringsRaw = [...new Set([...basePropsMap.values()].map(p => p['环路']).filter(d => d && d !== ''))];
+            ringsRaw.sort((a, b) => { let idxA = ringOrderMaster.indexOf(a); let idxB = ringOrderMaster.indexOf(b); return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB); });
+            let displayRings = ringsRaw.filter(r => ringChartState.selectedItems.includes(r));
+            let sortedYears = [...ringChartState.selectedYears].sort((a, b) => parseInt(a) - parseInt(b));
+            let globalMaxY = 10;
+            for (let yr of trendYears) {
+                let yrData = await loadYearData(yr);
+                for (let r of ringsRaw) {
+                    let sum = 0;
+                    for (let f of features) {
+                        let name = f.properties?.站点 || f.properties?.站名; let ringVal = basePropsMap.get(name)?.['环路'];
+                        if (ringVal === r) { let v = yrData.propsMap.get(name)?.[currentMetric]; if (v !== null && !isNaN(v)) sum += v; }
+                    }
+                    if (sum > globalMaxY) globalMaxY = sum;
+                }
+            }
+            updateChartContainerWidth('container-ring', displayRings.length, sortedYears.length);
+            let datasets = [];
+            for (let i = 0; i < sortedYears.length; i++) {
+                let yr = sortedYears[i]; let yrData = await loadYearData(yr); let values = [];
+                for (let r of displayRings) {
+                    let sum = 0;
+                    for (let f of features) {
+                        let name = f.properties?.站点 || f.properties?.站名; let ringVal = basePropsMap.get(name)?.['环路'];
+                        if (ringVal === r) { let v = yrData.propsMap.get(name)?.[currentMetric]; if (v !== null && !isNaN(v)) sum += v; }
+                    }
+                    values.push(sum);
+                }
+                datasets.push({ label: `${yr}年 ${currentMetric}`, data: values, backgroundColor: globalYearColors[yr] || '#f59e0b', barThickness: 24 });
+            }
+            if (ringChart) ringChart.destroy();
+            ringChart = new Chart(document.getElementById('ringCompareChart'), { type: 'bar', data: { labels: displayRings, datasets: datasets }, options: { responsive: true, maintainAspectRatio: false, scales: { x: { grid: { display: false } }, y: { beginAtZero: true, suggestedMax: globalMaxY * 1.1 } }, plugins: { tooltip: { callbacks: { label: (ctx) => `${ctx.dataset.label}: ${ctx.raw.toFixed(0)}` } } } } });
+        }
+
+        async function updateStationChart(stationName) {
+            if (!stationName) return;
+            let cColor = document.getElementById('stationTrendColor').value;
+            let values = [];
+            for (let yr of trendYears) {
+                let yrData = await loadYearData(yr); let v = yrData.propsMap.get(stationName)?.[currentMetric]; values.push(v !== null && !isNaN(v) ? v : 0);
+            }
+            if (stationTrendChart) stationTrendChart.destroy();
+            stationTrendChart = new Chart(document.getElementById('stationTrendChart'), {
+                type: 'line', data: { labels: trendYears, datasets: [{ label: `${stationName} - ${currentMetric}`, data: values, borderColor: cColor, backgroundColor: cColor, tension: 0.2, fill: false }] },
+                options: { responsive: true, maintainAspectRatio: false }
+            });
+        }
+
+        function refreshFilterButtons() {
+            const cats = { '级别': new Set(), '区县': new Set(), '分区': new Set(), '环路': new Set() };
+            for (let p of basePropsMap.values()) {
+                if (p['级别']) cats['级别'].add(p['级别']); if (p['区县']) cats['区县'].add(p['区县']);
+                if (p['分区']) cats['分区'].add(p['分区']); if (p['环路']) cats['环路'].add(p['环路']);
+            }
+            for (let k in filterCategories) {
+                let arr = Array.from(cats[k]);
+                if (k === '环路') { arr.sort((a, b) => { let idxA = ringOrderMaster.indexOf(a); let idxB = ringOrderMaster.indexOf(b); return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB); }); } else { arr.sort(); }
+                filterCategories[k] = arr;
+            }
+            let container = document.getElementById('filterButtons'); if (!container) return;
+            let html = '';
+            for (let g of ['级别', '区县', '分区', '环路']) { if (filterCategories[g].length > 0) html += `<button class="filter-main-btn" data-group="${g}">📌 按${g}筛选</button>`; }
+            container.innerHTML = html;
+            document.querySelectorAll('.filter-main-btn').forEach(btn => btn.addEventListener('click', () => showSubPopup(btn.getAttribute('data-group'))));
+        }
+
+        function showSubPopup(group) {
+            if (currentPopup) currentPopup.remove(); let items = filterCategories[group]; if (!items.length) return;
+            let div = document.createElement('div'); div.className = 'subcategory-popup';
+            div.innerHTML = `<div class="popup-header"><h4>${group} (可多选)</h4><button class="popup-close">✕</button></div>`;
+            for (let it of items) {
+                let checked = activeFilters[group].has(it);
+                div.innerHTML += `<div style="margin-bottom:6px;"><label style="cursor:pointer; font-size:13px; color:#1e2a3a;"><input type="checkbox" value="${it}" ${checked ? 'checked' : ''}> ${it}</label></div>`;
+            }
+            document.body.appendChild(div); currentPopup = div;
+            div.querySelector('.popup-close').onclick = () => div.remove();
+            div.querySelectorAll('input').forEach(cb => cb.addEventListener('change', (e) => { if (e.target.checked) activeFilters[group].add(e.target.value); else activeFilters[group].delete(e.target.value); renderMap(); }));
+            setTimeout(() => document.addEventListener('click', function handler(e) { if (!div.contains(e.target) && !e.target.closest('.filter-main-btn')) { div.remove(); document.removeEventListener('click', handler); } }), 100);
+        }
+
+        async function refreshAll() { await loadBaseProperties(); await loadStationsGeoJson(); await renderMap(); }
+
+        function initYearControls(cardId, state, updateFn) {
+            const dropdown = document.getElementById(cardId === 'cardDistrict' ? 'distYearDropdown' : 'ringYearDropdown');
+            const popup = dropdown.querySelector('.multi-popup');
+            const btn = dropdown.querySelector('.multi-btn');
+            let revYears = [...trendYears].reverse();
+            popup.innerHTML = revYears.map(y => `<div class="year-cb-row" style="justify-content: flex-start;"><label><input type="checkbox" value="${y}" ${state.selectedYears.includes(y) ? 'checked' : ''}> ${y}年</label><input type="color" data-year="${y}" value="${globalYearColors[y] || '#cccccc'}"></div>`).join('');
+            btn.addEventListener('click', (e) => { e.stopPropagation(); popup.classList.toggle('show'); });
+            popup.addEventListener('click', e => e.stopPropagation());
+            popup.querySelectorAll('input[type="checkbox"]').forEach(cb => { cb.addEventListener('change', () => { state.selectedYears = Array.from(popup.querySelectorAll('input[type="checkbox"]:checked')).map(n => n.value); updateFn(); }); });
+            popup.querySelectorAll('input[type="color"]').forEach(cp => {
+                cp.addEventListener('input', (e) => {
+                    let yr = e.target.dataset.year; globalYearColors[yr] = e.target.value;
+                    document.querySelectorAll(`.year-cb-row input[type="color"][data-year="${yr}"]`).forEach(otherCp => { if (otherCp !== e.target) otherCp.value = e.target.value; });
+                    if (appMode === 'compare') { updateDistrictChartCompare(getFilteredFeatures()); updateRingChartCompare(getFilteredFeatures()); }
+                });
+            });
+        }
+
+        function initLocalItemFilter(dropdownId, items, state, updateFn) {
+            const dropdown = document.getElementById(dropdownId);
+            const popup = dropdown.querySelector('.multi-popup');
+            const btn = dropdown.querySelector('.multi-btn');
+            state.selectedItems = [...items];
+            let html = `<div style="border-bottom:1px solid #edf2f7; padding-bottom:6px; margin-bottom:6px;"><label style="cursor:pointer; font-size:12px; color:#3b82f6; font-weight:bold;"><input type="checkbox" class="select-all-cb" checked> 全选 / 反选</label></div>`;
+            html += items.map(item => `<label style="display:flex; align-items:center; gap:6px; padding:4px 0; cursor:pointer; font-size:13px; color:#1e2a3a;"><input type="checkbox" class="item-cb" value="${item}" checked> ${item}</label>`).join('');
+            popup.innerHTML = html;
+            btn.addEventListener('click', (e) => { e.stopPropagation(); popup.classList.toggle('show'); });
+            popup.addEventListener('click', e => e.stopPropagation());
+            const selectAllCb = popup.querySelector('.select-all-cb'); const itemCbs = popup.querySelectorAll('.item-cb');
+            selectAllCb.addEventListener('change', (e) => { let isChecked = e.target.checked; itemCbs.forEach(cb => cb.checked = isChecked); state.selectedItems = isChecked ? [...items] : []; updateFn(); });
+            itemCbs.forEach(cb => { cb.addEventListener('change', () => { let checkedVals = Array.from(popup.querySelectorAll('.item-cb:checked')).map(n => n.value); state.selectedItems = checkedVals; selectAllCb.checked = checkedVals.length === items.length; updateFn(); }); });
+        }
+
+        function setupDrawingTools() {
+            const btnDraw = document.getElementById('btnDrawPolygon');
+            const btnClear = document.getElementById('btnClearPolygon');
+            if (!drawnPolygonsGroup) { drawnPolygonsGroup = L.featureGroup().addTo(map); }
+            btnDraw.addEventListener('click', function () {
+                if (isDrawing) return; isDrawing = true; drawPoints = [];
+                this.classList.add('active'); this.innerText = '🖱️ 点击画点 (双击闭合)';
+                map.doubleClickZoom.disable(); document.getElementById('map').style.cursor = 'crosshair';
+                drawLayer = L.polygon([], { color: '#ef4444', weight: 2, fillOpacity: 0.2, dashArray: '5, 5' }).addTo(drawnPolygonsGroup);
+            });
+            map.on('click', function (e) { if (!isDrawing) return; drawPoints.push(e.latlng); drawLayer.setLatLngs(drawPoints); });
+            map.on('dblclick', function (e) {
+                if (!isDrawing) return; isDrawing = false;
+                btnDraw.classList.remove('active'); btnDraw.innerText = '📐 多边形选区';
+                map.doubleClickZoom.enable(); document.getElementById('map').style.cursor = '';
+                if (drawPoints.length >= 3) {
+                    let coords = drawPoints.map(p => [p.lng, p.lat]); coords.push([drawPoints[0].lng, drawPoints[0].lat]);
+                    let newPoly = turf.polygon([coords]);
+                    customPolygons.push(newPoly);
+                    drawLayer.setStyle({ dashArray: null, color: '#3b82f6', fillOpacity: 0.1 });
+                    btnClear.style.display = 'block';
+                    renderMap();
+                } else { drawnPolygonsGroup.removeLayer(drawLayer); }
+            });
+            btnClear.addEventListener('click', function () {
+                customPolygons = []; drawnPolygonsGroup.clearLayers();
+                this.style.display = 'none'; document.getElementById('btnDrawPolygon').innerText = '📐 多边形选区';
+                renderMap();
+            });
+        }
+
+        // ==================== 单站分时客流模块（自动加载默认CSV） ====================
+        let hourlyChart = null;
+        let hourlyDataCache = new Map();
+        let hourlyChartType = 'line';
+        let allHourlyStationNames = [];
+
+        function parseComplexHourlyCsv(csvText) {
+            const result = Papa.parse(csvText, { header: false, skipEmptyLines: true });
+            const rows = result.data || [];
+            const findHeaderIndex = (keyword) => rows.findIndex(row => sanitizeString(row?.[0]).includes(keyword));
+
+            const inHeaderIdx = findHeaderIndex('站点进站量');
+            const outHeaderIdx = findHeaderIndex('站点出站量');
+            if (inHeaderIdx === -1 || outHeaderIdx === -1) return null;
+
+            const stationNames = (rows[inHeaderIdx] || []).slice(1).map(name => sanitizeString(name)).filter(Boolean);
+            if (stationNames.length === 0) return null;
+
+            const stationData = new Map();
+            stationNames.forEach(name => {
+                stationData.set(name, { inMap: new Map(), outMap: new Map(), allTimes: new Set() });
+            });
+
+            const cleanTimeLabel = (value) => sanitizeString(String(value || '').replace(/[进出]站/g, ''));
+
+            for (let i = inHeaderIdx + 1; i < outHeaderIdx; i++) {
+                const timeLabel = cleanTimeLabel(rows[i]?.[0]);
+                if (!timeLabel) continue;
+                stationNames.forEach((name, idx) => {
+                    const val = parseNumber(rows[i]?.[idx + 1]) || 0;
+                    const item = stationData.get(name);
+                    item.inMap.set(timeLabel, val);
+                    item.allTimes.add(timeLabel);
+                });
+            }
+
+            for (let i = outHeaderIdx + 1; i < rows.length; i++) {
+                const timeLabel = cleanTimeLabel(rows[i]?.[0]);
+                if (!timeLabel) continue;
+                stationNames.forEach((name, idx) => {
+                    const val = parseNumber(rows[i]?.[idx + 1]) || 0;
+                    const item = stationData.get(name);
+                    item.outMap.set(timeLabel, val);
+                    item.allTimes.add(timeLabel);
+                });
+            }
+
+            const parseTimeValue = (label) => {
+                const match = String(label).match(/(\d{1,2})[:：](\d{2})/);
+                if (!match) return Number.MAX_SAFE_INTEGER;
+                let hour = parseInt(match[1], 10);
+                const minute = parseInt(match[2], 10);
+                if (hour < 4) hour += 24;
+                return hour * 60 + minute;
+            };
+
+            const cache = new Map();
+            stationData.forEach((data, name) => {
+                const times = Array.from(data.allTimes).sort((a, b) => parseTimeValue(a) - parseTimeValue(b));
+                cache.set(name, {
+                    times,
+                    inVals: times.map(time => data.inMap.get(time) || 0),
+                    outVals: times.map(time => data.outMap.get(time) || 0)
+                });
+            });
+
+            return { cache, stations: stationNames };
+        }
+
+        function parseComplexHourlyCsvV2(csvText) {
+            const result = Papa.parse(csvText, { header: false, skipEmptyLines: true });
+            const rows = result.data || [];
+            const firstCell = row => sanitizeString(row?.[0] || '');
+            const inHeaderIdx = rows.findIndex(row => firstCell(row).includes('站点进站量'));
+            const outHeaderIdx = rows.findIndex(row => firstCell(row).includes('站点出站量'));
+            if (inHeaderIdx === -1 || outHeaderIdx === -1 || outHeaderIdx <= inHeaderIdx) return null;
+
+            const stationNames = (rows[inHeaderIdx] || []).slice(1).map(name => sanitizeString(name)).filter(Boolean);
+            if (!stationNames.length) return null;
+
+            const stationData = new Map();
+            stationNames.forEach(name => stationData.set(name, { inMap: new Map(), outMap: new Map(), allTimes: new Set() }));
+
+            const normalizeTimeLabel = value => sanitizeString(String(value || '').replace(/[进出]站/g, ''));
+
+            for (let i = inHeaderIdx + 1; i < outHeaderIdx; i++) {
+                const timeLabel = normalizeTimeLabel(rows[i]?.[0]);
+                if (!timeLabel) continue;
+                stationNames.forEach((name, idx) => {
+                    const item = stationData.get(name);
+                    item.inMap.set(timeLabel, parseNumber(rows[i]?.[idx + 1]) || 0);
+                    item.allTimes.add(timeLabel);
+                });
+            }
+
+            for (let i = outHeaderIdx + 1; i < rows.length; i++) {
+                const timeLabel = normalizeTimeLabel(rows[i]?.[0]);
+                if (!timeLabel) continue;
+                stationNames.forEach((name, idx) => {
+                    const item = stationData.get(name);
+                    item.outMap.set(timeLabel, parseNumber(rows[i]?.[idx + 1]) || 0);
+                    item.allTimes.add(timeLabel);
+                });
+            }
+
+            const cache = new Map();
+            stationData.forEach((data, name) => {
+                const times = Array.from(data.allTimes).sort((a, b) => parseTimeValueSafe(a) - parseTimeValueSafe(b));
+                cache.set(name, {
+                    times,
+                    inVals: times.map(time => data.inMap.get(time) || 0),
+                    outVals: times.map(time => data.outMap.get(time) || 0)
+                });
+            });
+
+            return { cache, stations: stationNames };
+        }
+
+        function parseTimeValueSafe(label) {
+            const match = String(label).match(/(\d{1,2})[:：](\d{2})/);
+            if (!match) return Number.MAX_SAFE_INTEGER;
+            let hour = parseInt(match[1], 10);
+            const minute = parseInt(match[2], 10);
+            if (hour < 4) hour += 24;
+            return hour * 60 + minute;
+        }
+
+        async function ensureHourlyDatasetLoaded(propsMap) {
+            const cachedLabels = propsMap.get('_TIME_LABELS_');
+            if (Array.isArray(cachedLabels) && cachedLabels.length > 0) return;
+
+            let hourlyFileName = null;
+            for (let key of localFilesMap.keys()) {
+                const cleanKey = sanitizeString(key);
+                if (cleanKey.includes('分时') || cleanKey.includes('单日') || cleanKey.includes('进出站量')) {
+                    hourlyFileName = key;
+                    break;
+                }
+            }
+            if (!hourlyFileName) hourlyFileName = 'data/420车站_站点单日进出客流量_20260311.csv';
+
+            const text = await fetchCsvText(hourlyFileName);
+            const complexHourlyData = parseComplexHourlyCsvV2(text) || parseComplexHourlyCsv(text);
+            if (!complexHourlyData) return;
+
+            const firstStation = complexHourlyData.cache.get(complexHourlyData.stations[0]);
+            propsMap.set('_TIME_LABELS_', firstStation?.times || []);
+            propsMap.set('_HAS_OUT_DATA_', true);
+
+            complexHourlyData.cache.forEach((value, stationName) => {
+                const p = propsMap.get(stationName) || {};
+                p.times = value.times;
+                p.inVals = value.inVals;
+                p.outVals = value.outVals;
+                propsMap.set(stationName, p);
+            });
+        }
+
+        function parseHourlyCSV(csvText) {
+            const result = Papa.parse(csvText, { header: false, skipEmptyLines: true });
+            const rows = result.data;
+            let inHeaderIdx = rows.findIndex(row => row[0] && row[0].trim() === '站点进站量');
+            let outHeaderIdx = rows.findIndex(row => row[0] && row[0].trim() === '站点出站量');
+            if (inHeaderIdx === -1 || outHeaderIdx === -1) {
+                alert("CSV格式不正确，需包含'站点进站量'和'站点出站量'关键词");
+                return null;
+            }
+            const stationNames = rows[inHeaderIdx].slice(1).map(s => s.trim()).filter(s => s);
+            const stationData = new Map();
+            stationNames.forEach(name => stationData.set(name, { inMap: new Map(), outMap: new Map(), allTimes: new Set() }));
+            for (let i = inHeaderIdx + 1; i < outHeaderIdx; i++) {
+                const timeClean = String(rows[i][0]).replace(/[进出]站/g, '').trim();
+                stationNames.forEach((name, idx) => {
+                    const val = parseFloat(rows[i][idx + 1]) || 0;
+                    stationData.get(name).inMap.set(timeClean, val);
+                    stationData.get(name).allTimes.add(timeClean);
+                });
+            }
+            for (let i = outHeaderIdx + 1; i < rows.length; i++) {
+                const timeClean = String(rows[i][0]).replace(/[进出]站/g, '').trim();
+                stationNames.forEach((name, idx) => {
+                    const val = parseFloat(rows[i][idx + 1]) || 0;
+                    stationData.get(name).outMap.set(timeClean, val);
+                    stationData.get(name).allTimes.add(timeClean);
+                });
+            }
+            const finalCache = new Map();
+            stationData.forEach((data, name) => {
+                const sortedTimes = Array.from(data.allTimes).sort((a, b) => {
+                    const t1 = a.split(':')[0].padStart(2, '0');
+                    const t2 = b.split(':')[0].padStart(2, '0');
+                    return t1.localeCompare(t2);
+                });
+                finalCache.set(name, {
+                    times: sortedTimes,
+                    inVals: sortedTimes.map(t => data.inMap.get(t) || 0),
+                    outVals: sortedTimes.map(t => data.outMap.get(t) || 0)
+                });
+            });
+            return { cache: finalCache, stations: stationNames };
+        }
+
+        function renderHourlyChart() {
+            const stationName = document.getElementById('hourlyStationSelect').value;
+            if (!stationName || !hourlyDataCache.has(stationName)) return;
+            const data = hourlyDataCache.get(stationName);
+            const inColor = document.getElementById('hourlyInColorPicker').value;
+            const outColor = document.getElementById('hourlyOutColorPicker').value;
+            const option = {
+                backgroundColor: '#fff',
+                tooltip: {
+                    trigger: 'axis',
+                    axisPointer: { type: 'shadow' },
+                    formatter: (params) => {
+                        let res = `<b style="color:#333">${params[0].name}</b><br/>`;
+                        params.forEach(p => {
+                            res += `${p.marker} ${p.seriesName}: <b>${Math.abs(p.value)}</b> 人次<br/>`;
+                        });
+                        return res;
+                    }
+                },
+                legend: { data: ['进站客流', '出站客流'], top: '2%' },
+                grid: { left: '3%', right: '4%', bottom: '12%', containLabel: true },
+                xAxis: {
+                    type: 'category',
+                    data: data.times,
+                    axisLabel: { rotate: 35, interval: 0, fontSize: 11, color: '#64748b' }
+                },
+                yAxis: {
+                    type: 'value',
+                    name: '人次 (进正/出负)',
+                    axisLabel: { formatter: (v) => Math.abs(v) },
+                    splitLine: { lineStyle: { type: 'dashed', color: '#e2e8f0' } }
+                },
+                series: [
+                    {
+                        name: '进站客流',
+                        type: hourlyChartType,
+                        data: data.inVals,
+                        color: inColor,
+                        smooth: true,
+                        barMaxWidth: 20,
+                        showSymbol: false,
+                        areaStyle: hourlyChartType === 'line' ? { opacity: 0.2 } : null
+                    },
+                    {
+                        name: '出站客流',
+                        type: hourlyChartType,
+                        data: data.outVals.map(v => -v),
+                        color: outColor,
+                        smooth: true,
+                        barMaxWidth: 20,
+                        showSymbol: false,
+                        areaStyle: hourlyChartType === 'line' ? { opacity: 0.2 } : null
+                    }
+                ],
+                dataZoom: [{ type: 'slider', bottom: '2%' }]
+            };
+            if (!hourlyChart) hourlyChart = echarts.init(document.getElementById('hourlyTrendChart'));
+            hourlyChart.setOption(option, true);
+            const totalIn = data.inVals.reduce((a, b) => a + b, 0);
+            const totalOut = data.outVals.reduce((a, b) => a + b, 0);
+            document.getElementById('hourlyStatsHint').innerText = `总客流量: ${(totalIn + totalOut).toLocaleString()} 人次 (进:${totalIn.toLocaleString()}, 出:${totalOut.toLocaleString()})`;
+        }
+
+        function updateHourlyStationSelect(filterText = '') {
+            const select = document.getElementById('hourlyStationSelect');
+            const currentVal = select.value;
+            let filtered = allHourlyStationNames;
+            if (filterText.trim() !== '') {
+                const lower = filterText.toLowerCase();
+                filtered = allHourlyStationNames.filter(name => name.toLowerCase().includes(lower));
+            }
+            select.innerHTML = filtered.map(s => `<option value="${s}">${s}</option>`).join('');
+            if (filtered.length > 0 && filtered.includes(currentVal)) {
+                select.value = currentVal;
+            } else if (filtered.length > 0) {
+                select.value = filtered[0];
+            }
+            renderHourlyChart();
+        }
+
+        async function loadDefaultHourlyFile() {
+            const defaultFileName = 'data/420车站_站点单日进出客流量_20260311.csv';
+            try {
+                const csvText = await fetchCsvText(defaultFileName);
+                const result = parseHourlyCSV(csvText);
+                if (result && result.stations.length) {
+                    hourlyDataCache = result.cache;
+                    allHourlyStationNames = result.stations;
+                    const stationSelect = document.getElementById('hourlyStationSelect');
+                    stationSelect.innerHTML = result.stations.map(s => `<option value="${s}">${s}</option>`).join('');
+                    const controls = document.getElementById('hourlyControls');
+                    const uploadZone = document.getElementById('hourlyUploadZone');
+                    controls.style.display = 'block';
+                    uploadZone.style.display = 'none';
+                    if (result.stations.length) {
+                        stationSelect.value = result.stations[0];
+                        renderHourlyChart();
+                    }
+                    const searchInput = document.getElementById('hourlyStationSearch');
+                    if (searchInput) {
+                        searchInput.value = '';
+                        searchInput.oninput = (e) => updateHourlyStationSelect(e.target.value);
+                    }
+                    console.log(`成功自动加载 ${defaultFileName}，共 ${result.stations.length} 个站点`);
+                } else {
+                    throw new Error('解析结果为空');
+                }
+            } catch (e) {
+                console.warn(`自动加载 ${defaultFileName} 失败:`, e);
+                document.getElementById('hourlyUploadZone').style.display = 'block';
+                document.getElementById('hourlyControls').style.display = 'none';
+                document.getElementById('hourlyStatsHint').innerText = '未找到默认数据文件，请手动上传 CSV';
+            }
+        }
+
+        function initHourlyModule() {
+            const fileInput = document.getElementById('hourlyFileInput');
+            const uploadZone = document.getElementById('hourlyUploadZone');
+            const controls = document.getElementById('hourlyControls');
+            const stationSelect = document.getElementById('hourlyStationSelect');
+            const typeLine = document.getElementById('hourlyTypeLine');
+            const typeBar = document.getElementById('hourlyTypeBar');
+            const inColorPicker = document.getElementById('hourlyInColorPicker');
+            const outColorPicker = document.getElementById('hourlyOutColorPicker');
+
+            fileInput.addEventListener('change', (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (ev) => {
+                    const result = parseHourlyCSV(ev.target.result);
+                    if (result && result.stations.length) {
+                        hourlyDataCache = result.cache;
+                        allHourlyStationNames = result.stations;
+                        stationSelect.innerHTML = result.stations.map(s => `<option value="${s}">${s}</option>`).join('');
+                        controls.style.display = 'block';
+                        uploadZone.style.display = 'none';
+                        if (result.stations.length) {
+                            stationSelect.value = result.stations[0];
+                            renderHourlyChart();
+                        }
+                        const searchInput = document.getElementById('hourlyStationSearch');
+                        if (searchInput) {
+                            searchInput.value = '';
+                            searchInput.oninput = (e) => updateHourlyStationSelect(e.target.value);
+                        }
+                    } else {
+                        alert("解析失败，请检查CSV格式");
+                    }
+                };
+                reader.readAsText(file);
+            });
+
+            uploadZone.addEventListener('dragover', (e) => { e.preventDefault(); uploadZone.style.background = '#dbeafe'; });
+            uploadZone.addEventListener('dragleave', () => { uploadZone.style.background = '#eff6ff'; });
+            uploadZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadZone.style.background = '#eff6ff';
+                const file = e.dataTransfer.files[0];
+                if (file && file.name.endsWith('.csv')) {
+                    fileInput.files = file;
+                    const event = new Event('change');
+                    fileInput.dispatchEvent(event);
+                } else {
+                    alert("请拖拽 CSV 文件");
+                }
+            });
+
+            stationSelect.addEventListener('change', renderHourlyChart);
+            typeLine.addEventListener('click', () => { hourlyChartType = 'line'; typeLine.classList.add('active'); typeBar.classList.remove('active'); renderHourlyChart(); });
+            typeBar.addEventListener('click', () => { hourlyChartType = 'bar'; typeBar.classList.add('active'); typeLine.classList.remove('active'); renderHourlyChart(); });
+            inColorPicker.addEventListener('input', renderHourlyChart);
+            outColorPicker.addEventListener('input', renderHourlyChart);
+            window.addEventListener('resize', () => { if (hourlyChart) hourlyChart.resize(); });
+
+            loadDefaultHourlyFile();
+        }
+
+        // ==================== 全局控制函数 ====================
+        function setupControls() {
+            document.getElementById('btnModeCurrent').addEventListener('click', () => { appMode = 'current'; document.body.setAttribute('data-mode', 'current'); document.getElementById('btnModeCurrent').classList.add('active'); document.getElementById('btnModeCompare').classList.remove('active'); renderMap(); });
+            document.getElementById('btnModeCompare').addEventListener('click', () => { appMode = 'compare'; document.body.setAttribute('data-mode', 'compare'); document.getElementById('btnModeCompare').classList.add('active'); document.getElementById('btnModeCurrent').classList.remove('active'); renderMap(); });
+            document.getElementById('btnTriggerUpload').addEventListener('click', () => document.getElementById('localDataUpload').click());
+            document.getElementById('localDataUpload').addEventListener('change', async (e) => {
+                let loadedCount = 0;
+                if (!drawnPolygonsGroup) drawnPolygonsGroup = L.featureGroup().addTo(map);
+                for (let file of e.target.files) {
+                    localFilesMap.set(file.name, file); loadedCount++;
+                    if (file.name.toLowerCase().endsWith('.geojson') || file.name.toLowerCase().endsWith('.json')) {
+                        if (!file.name.includes('车站') && !file.name.includes('线路')) {
+                            try {
+                                let geoData = JSON.parse(await file.text());
+                                if (geoData.type) {
+                                    customPolygons.push(geoData);
+                                    document.getElementById('btnClearPolygon').style.display = 'block';
+                                    let uploadedLayer = L.geoJSON(geoData, { style: { color: '#10b981', weight: 2, fillOpacity: 0.1 } });
+                                    drawnPolygonsGroup.addLayer(uploadedLayer);
+                                    try { map.fitBounds(drawnPolygonsGroup.getBounds()); } catch (e) { }
+                                }
+                            } catch (err) { }
+                        }
+                    }
+                }
+                if (loadedCount > 0) { alert(`成功导入 ${loadedCount} 个文件！`); yearDataCache.clear(); refreshAll(); }
+            });
+            document.getElementById('yearCurrent').addEventListener('change', async (e) => { currentYear = e.target.value; await refreshAll(); });
+            document.getElementById('yearA').addEventListener('change', async (e) => { currentYearA = e.target.value; await refreshAll(); });
+            document.getElementById('yearB').addEventListener('change', async (e) => { currentYearB = e.target.value; await refreshAll(); });
+            document.getElementById('metricSelect').addEventListener('change', async (e) => { currentMetric = e.target.value; document.getElementById('metricLegendName').innerText = `${currentMetric}`; await refreshAll(); });
+            document.getElementById('refreshBtn').addEventListener('click', async () => { await refreshAll(); });
+            document.getElementById('minFlowSlider').addEventListener('input', (e) => { minFlowThreshold = parseFloat(e.target.value); document.getElementById('minFlowInput').value = minFlowThreshold; renderMap(); });
+            document.getElementById('minFlowInput').addEventListener('change', (e) => { minFlowThreshold = parseFloat(e.target.value) || 0; document.getElementById('minFlowSlider').value = minFlowThreshold; renderMap(); });
+            document.getElementById('sizeSlider').addEventListener('input', (e) => { circleSizeFactor = parseFloat(e.target.value); renderMap(); });
+            document.getElementById('opacitySlider').addEventListener('input', (e) => { currentOpacity = parseFloat(e.target.value); renderMap(); });
+            document.querySelectorAll('.chart-theme-picker').forEach(select => {
+                select.addEventListener('change', (e) => {
+                    let target = e.target.getAttribute('data-target');
+                    let themeKey = e.target.value;
+                    let colorInputs = [];
+                    if (target === 'curTotal') colorInputs = [document.getElementById('curTotalColor')];
+                    if (target === 'curAvg') colorInputs = [document.getElementById('curAvgColor')];
+                    if (target === 'stationTrend') colorInputs = [document.getElementById('stationTrendColor')];
+                    if (target === 'total') {
+                        if (themeKey !== 'default') {
+                            let theme = CHART_THEMES[themeKey];
+                            let years = [...trendYears].reverse();
+                            for (let i = 0; i < Math.min(years.length, theme.length); i++) globalYearColors[years[i]] = theme[i];
+                        } else {
+                            let defColors = { '2019': '#64748b', '2023': '#8b5cf6', '2024': '#94a3b8', '2025': '#f59e0b', '2026': '#3b82f6' };
+                            for (let yr in defColors) globalYearColors[yr] = defColors[yr];
+                        }
+                        if (appMode === 'compare') updateDashboardCompare(getFilteredFeatures());
+                    }
+                    if (target === 'district' || target === 'ring') {
+                        if (themeKey !== 'default') {
+                            let theme = CHART_THEMES[themeKey];
+                            let years = [...trendYears].reverse();
+                            for (let i = 0; i < Math.min(years.length, theme.length); i++) {
+                                globalYearColors[years[i]] = theme[i];
+                                document.querySelectorAll(`#${target === 'district' ? 'distYearDropdown' : 'ringYearDropdown'} input[type="color"][data-year="${years[i]}"]`).forEach(cp => cp.value = theme[i]);
+                            }
+                        } else {
+                            let defColors = { '2019': '#64748b', '2023': '#8b5cf6', '2024': '#94a3b8', '2025': '#f59e0b', '2026': '#3b82f6' };
+                            for (let yr in defColors) {
+                                globalYearColors[yr] = defColors[yr];
+                                document.querySelectorAll(`#${target === 'district' ? 'distYearDropdown' : 'ringYearDropdown'} input[type="color"][data-year="${yr}"]`).forEach(cp => cp.value = defColors[yr]);
+                            }
+                        }
+                        if (appMode === 'compare') {
+                            if (target === 'district') updateDistrictChartCompare(getFilteredFeatures());
+                            if (target === 'ring') updateRingChartCompare(getFilteredFeatures());
+                        }
+                    }
+                    if (target === 'stationTrend' && stationTrendChart) {
+                        let c = colorInputs[0]?.value || '#3b82f6';
+                        stationTrendChart.data.datasets[0].borderColor = c;
+                        stationTrendChart.data.datasets[0].backgroundColor = c;
+                        stationTrendChart.update();
+                    }
+                });
+            });
+            document.getElementById('curTotalColor').addEventListener('input', (e) => { if (curTotalChart) { curTotalChart.data.datasets[0].backgroundColor = e.target.value; curTotalChart.update(); } });
+            document.getElementById('curAvgColor').addEventListener('input', (e) => { if (curAvgChart) { curAvgChart.data.datasets[0].backgroundColor = e.target.value; curAvgChart.update(); } });
+            document.getElementById('stationTrendColor').addEventListener('input', (e) => { if (stationTrendChart) { stationTrendChart.data.datasets[0].borderColor = e.target.value; stationTrendChart.data.datasets[0].backgroundColor = e.target.value; stationTrendChart.update(); } });
+            document.getElementById('bubbleColorPicker').addEventListener('input', (e) => { currentBubbleColor = e.target.value; document.querySelectorAll('.bc-current').forEach(el => el.style.backgroundColor = currentBubbleColor); renderMap(); });
+            document.getElementById('singleStationSelect').addEventListener('change', (e) => { updateStationChart(e.target.value); });
+            document.getElementById('btnGrowth').addEventListener('click', async () => { currentSortMode = 'growth'; document.getElementById('btnGrowth').className = 'sort-btn active-red'; document.getElementById('btnDecline').className = 'sort-btn'; await renderMap(); });
+            document.getElementById('btnDecline').addEventListener('click', async () => { currentSortMode = 'decline'; document.getElementById('btnDecline').className = 'sort-btn active-blue'; document.getElementById('btnGrowth').className = 'sort-btn'; await renderMap(); });
+            document.getElementById('curGroupByTotal').addEventListener('change', () => { renderMap(); });
+            document.getElementById('curGroupByAvg').addEventListener('change', () => { renderMap(); });
+
+            let allAvailableDistricts = [...new Set([...basePropsMap.values()].map(p => p['区县']).filter(d => d && d !== ''))].sort((a, b) => districtOrder.indexOf(a) - districtOrder.indexOf(b));
+            let allAvailableRings = [...new Set([...basePropsMap.values()].map(p => p['环路']).filter(d => d && d !== ''))];
+            allAvailableRings.sort((a, b) => { let idxA = ringOrderMaster.indexOf(a); let idxB = ringOrderMaster.indexOf(b); return (idxA === -1 ? 999 : idxA) - (idxB === -1 ? 999 : idxB); });
+            initLocalItemFilter('distFilterDropdown', allAvailableDistricts, distChartState, () => { if (appMode === 'compare') updateDistrictChartCompare(getFilteredFeatures()); });
+            initLocalItemFilter('ringFilterDropdown', allAvailableRings, ringChartState, () => { if (appMode === 'compare') updateRingChartCompare(getFilteredFeatures()); });
+            initYearControls('cardDistrict', distChartState, () => { if (appMode === 'compare') updateDistrictChartCompare(getFilteredFeatures()); });
+            initYearControls('cardRing', ringChartState, () => { if (appMode === 'compare') updateRingChartCompare(getFilteredFeatures()); });
+            setupDrawingTools();
+            document.addEventListener('click', () => { document.querySelectorAll('.multi-popup.show').forEach(p => p.classList.remove('show')); });
+        }
+
+        async function init() {
+            initMap(); await loadBaseProperties(); await loadStationsGeoJson(); await loadLines();
+            setupControls(); refreshFilterButtons(); await renderMap();
+            initHourlyModule();  // 初始化分时客流模块（自动加载默认CSV）
+        }
+        function initMap() { map = L.map('map').setView([39.9042, 116.4074], 10); L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', { attribution: '&copy; OSM', subdomains: 'abcd' }).addTo(map); }
+
+        init();
+    </script>
+</body>
+
+</html>
